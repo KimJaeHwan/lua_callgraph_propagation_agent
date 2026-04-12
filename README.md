@@ -4,6 +4,26 @@
 
 이 프로젝트는 단일 함수 feature만으로 애매한 후보를 결정하려는 단계가 아니라, caller/callee 관계를 이용해 retrieval 후보를 재랭킹하고 high-confidence mapping을 주변 함수로 propagation/ref-backpropagation하는 단계를 담당합니다.
 
+## 관련 서브프로젝트
+
+이 프로젝트는 Lua Mapper 전체 흐름의 마지막 decision layer에 가깝습니다. 앞 단계의 서브프로젝트들은 각각 데이터를 만들고, feature를 추출하고, retrieval 후보를 생성하는 역할을 담당합니다.
+
+| Repository | 역할 |
+| --- | --- |
+| [`lua_custom_engine_generator`](https://github.com/KimJaeHwan/lua_custom_engine_generator) | 커스텀 Lua 엔진/바이너리 생성 단계. 다양한 Lua 버전, 아키텍처, 최적화 옵션 조합을 만들어 후속 분석 입력을 준비한다. |
+| [`lua_extract_feature_ghidra`](https://github.com/KimJaeHwan/lua_extract_feature_ghidra) | Ghidra/PyGhidra 기반 feature extraction 단계. 바이너리 함수별 opcode, call, struct offset, compare, string 등 정적 feature를 추출한다. |
+| [`lua_function_embedding`](https://github.com/KimJaeHwan/lua_function_embedding) | 함수 retrieval baseline 단계. 추출된 feature를 symbolic/numeric/semantic 표현으로 바꾸고, hybrid embedding 검색으로 top-k 후보를 만든다. |
+| [`lua_callgraph_propagation_agent`](https://github.com/KimJaeHwan/lua_callgraph_propagation_agent) | 최종 graph reasoning 단계. retrieval 후보를 call graph 문맥으로 재검증하고 propagation/ref-backpropagation을 통해 최종 함수 매핑을 결정한다. |
+
+전체 흐름은 다음과 같이 본다.
+
+```text
+lua_custom_engine_generator
+  -> lua_extract_feature_ghidra
+  -> lua_function_embedding
+  -> lua_callgraph_propagation_agent
+```
+
 ## 배경
 
 `lua_function_embedding`에서는 symbolic/numeric/semantic hybrid retrieval baseline을 만들었습니다.
