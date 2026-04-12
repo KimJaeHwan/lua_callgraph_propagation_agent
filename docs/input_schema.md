@@ -67,11 +67,70 @@ ref::Lua_547::luaD_precall
 
 ### 1.4 Score Range
 
-점수는 기본적으로 `0.0 ~ 1.0` 범위로 둔다.
+`score_total`과 `score_breakdown`은 이전 단계인 `lua_function_embedding`에서 계산된 retrieval score를 그대로 전달받는다. 이 프로젝트는 retrieval scoring 방식을 다시 정의하지 않는다.
+
+`lua_callgraph_propagation_agent`는 해당 retrieval score를 `retrieval_prior`로 사용한다. Propagation 단계에서 새로 계산하는 값은 call graph 기반 evidence score이며, 이는 기존 retrieval score를 대체하는 것이 아니라 보정하는 역할을 한다.
+
+외부에 노출되는 score와 confidence는 기본적으로 `0.0 ~ 1.0` 범위로 둔다.
 
 예외적으로 penalty를 포함한 internal score가 음수가 될 수 있으면, 최종 출력 전 normalize하거나 별도 필드에 저장한다.
 
-### 1.5 Retrieval 후보 기본 정책
+### 1.5 Scoring Policy
+
+Propagation 단계에서 scoring이 추가되는 이유는 call graph가 함수 역할 판단에 중요한 문맥 정보를 제공하기 때문이다.
+
+그러나 call graph는 완전한 정답 신호가 아니다. 최적화에 의한 inline, dead code 제거, indirect call 처리 차이, 커스텀 function call 추가 때문에 query graph와 reference graph는 완전히 일치하지 않을 수 있다.
+
+따라서 scoring 정책은 다음을 따른다.
+
+- `lua_function_embedding`의 retrieval score는 변경하지 않고 `retrieval_prior`로 사용한다.
+- `graph_score`는 caller/callee anchor 일치, reference neighborhood 일치, mutual edge evidence를 반영하는 보정 점수다.
+- `graph_score`는 애매한 retrieval 후보를 재랭킹하거나 `accepted`, `deferred`, `conflict` 상태를 정하는 데 사용한다.
+- 최적화로 인한 missing edge는 강한 penalty로 바로 처리하지 않는다.
+- Reference graph에 없는 extra edge가 있다고 후보를 즉시 reject하지 않는다.
+- Reference graph에 없는 extra edge는 `custom_suspected` 또는 Local LLM analyst 대상 signal로 저장할 수 있다.
+- 명확한 one-to-one 충돌이나 graph inconsistency가 있을 때만 제한적으로 penalty를 적용한다.
+
+예시:
+
+```text
+query::00119970 후보:
+  llex          retrieval_prior = 0.711
+  luaV_execute  retrieval_prior = 0.709
+
+query graph evidence:
+  query::00119970 -> query::0011A010
+  query::0011A010 -> ref::Lua_547::luaD_precall 로 이미 매핑됨
+
+reference graph evidence:
+  ref::Lua_547::luaV_execute -> ref::Lua_547::luaD_precall
+```
+
+이 경우 retrieval 점수만 보면 `llex`가 근소하게 앞서지만, graph evidence는 `luaV_execute` 쪽을 지지한다. Propagation 단계에서는 `luaV_execute`에 graph bonus를 부여해 최종 후보를 재랭킹할 수 있다.
+
+Custom call이 추가된 경우는 다음처럼 처리한다.
+
+```text
+query candidate:
+  matched_core_callees = ["luaD_precall", "luaT_trybinTM"]
+  unknown_extra_callees = ["custom_auth_check"]
+
+policy:
+  keep core candidate
+  add positive evidence for matched_core_callees
+  mark custom_suspected for unknown_extra_callees
+  optionally send to Local LLM analyst layer
+```
+
+즉, 이 프로젝트의 scoring 철학은 다음과 같다.
+
+```text
+final_score = retrieval_prior + graph_bonus - graph_penalty
+```
+
+단, `graph_bonus`와 `graph_penalty`는 conservative하게 적용한다. Graph evidence는 retrieval 결과를 무조건 덮어쓰는 정답이 아니라, 리버싱 분석자가 확인해야 할 후보를 더 잘 정렬하기 위한 보조 신호다.
+
+### 1.6 Retrieval 후보 기본 정책
 
 `retrieval_topk.json`의 `candidates`는 기본적으로 function name 기준 unique top-k를 사용한다.
 
@@ -83,7 +142,7 @@ ref::Lua_547::luaD_precall
 - `raw_candidates`: optional debug field.
 - propagation baseline은 `candidates`만으로 동작해야 한다.
 
-### 1.6 LLM Context
+### 1.7 LLM Context
 
 LLM 입력은 optional이다.
 

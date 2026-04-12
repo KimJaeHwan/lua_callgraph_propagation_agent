@@ -73,6 +73,10 @@ final_score =
 
 중요한 점은 graph score가 retrieval score를 무조건 덮어쓰지 않는 것이다. Graph evidence는 애매한 후보를 재정렬하고 conflict를 감지하는 보정 신호로 시작한다.
 
+`retrieval_prior`는 `lua_function_embedding`에서 계산된 score를 그대로 사용한다. 이 Agent는 retrieval scoring 자체를 다시 정의하지 않는다.
+
+Graph score는 최적화에 의한 inline 변화와 커스텀 function call 추가 가능성을 고려해 conservative하게 적용한다. Missing edge는 강한 penalty로 바로 처리하지 않고, reference graph에 없는 extra edge도 즉시 reject하지 않는다. Extra edge는 `custom_suspected` signal 또는 Local LLM analyst layer의 입력 근거로 사용할 수 있다.
+
 ## 6. Propagation Strategy
 
 1. Retrieval top-1과 top-k margin이 충분한 후보를 anchor로 잡는다.
