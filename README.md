@@ -4,6 +4,8 @@
 
 이 프로젝트는 단일 함수 feature만으로 애매한 후보를 결정하려는 단계가 아니라, caller/callee 관계를 이용해 retrieval 후보를 재랭킹하고 high-confidence mapping을 주변 함수로 propagation/ref-backpropagation하는 단계를 담당합니다.
 
+이 프로젝트에서 Agent는 LLM이 단독으로 취약점을 판정하는 시스템이 아니다. Retrieval 후보, call graph evidence, local LLM 분석 요약을 함께 사용해 분석자가 봐야 할 함수 후보를 줄이고, Lua core 함수와 custom application/binding logic의 경계를 더 빠르게 파악하기 위한 분석 보조 루프다.
+
 ## 관련 서브프로젝트
 
 이 프로젝트는 Lua Mapper 전체 흐름의 마지막 decision layer에 가깝습니다. 앞 단계의 서브프로젝트들은 각각 데이터를 만들고, feature를 추출하고, retrieval 후보를 생성하는 역할을 담당합니다.
@@ -64,9 +66,46 @@ retrieval_topk.json
   -> initialize candidate beliefs
   -> propagate confidence from anchors
   -> backpropagate evidence from mapped neighbors
+  -> local LLM analyst review for ambiguous/custom-suspected cases
   -> resolve conflicts
   -> export final_mapping.json
 ```
+
+## Local LLM Analyst Layer
+
+Local LLM은 최종 판정자가 아니라 애매한 함수에 대한 analyst assistant로 사용한다. 모든 함수에 LLM을 적용하지 않고, retrieval과 graph score만으로 판단이 어려운 함수에 한해 feature와 코드 문맥을 요약하게 한다.
+
+대상 예시:
+
+- Retrieval top-k score gap이 작아 후보가 애매한 함수.
+- Retrieval confidence가 낮지만 call graph상 중요한 위치에 있는 함수.
+- Lua core 함수와 custom binding/application logic 사이에서 판단이 필요한 함수.
+- Graph conflict가 발생해 자동 확정하기 어려운 함수.
+
+입력으로 줄 수 있는 정보:
+
+- Function-level extracted feature.
+- Retrieval top-k 후보와 score breakdown.
+- Query/reference call graph neighborhood.
+- 이미 확정된 anchor mapping.
+- 필요한 경우 decompiled code, assembly, pcode snippet.
+
+출력은 최종 mapping을 바로 덮어쓰는 값이 아니라 evidence로 저장한다.
+
+```json
+{
+  "classification": "custom_application_logic",
+  "confidence": 0.78,
+  "reasoning_summary": [
+    "calls Lua C API helper functions",
+    "contains application-specific strings such as user_id and policy",
+    "calls custom_auth_check, which is not present in vanilla Lua reference graph"
+  ],
+  "recommended_action": "prioritize manual review as possible authorization logic"
+}
+```
+
+이 방식은 취약점 자동 분석이 아니라 리버싱 기반 logical vulnerability 분석에서 기능 함수 식별과 분석 우선순위화를 돕는 AX 도구를 목표로 한다.
 
 ## 디렉터리
 
@@ -101,5 +140,6 @@ Git에서 제외하는 항목:
 - 입력 스키마 정의: retrieval result, query call graph, reference call graph.
 - 후보 belief 모델 정의: semantic/numeric/symbolic score와 graph score 결합 방식.
 - propagation rule 설계: caller, callee, mutual edge, path neighborhood.
+- local LLM analyst 입력/출력 스키마 정의.
 - conflict resolver 설계: one-to-one mapping, family-level mapping, ambiguous candidate 보류.
 - eval runner 작성: retrieval-only 대비 propagation 후 top-k 개선 여부 측정.
