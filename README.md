@@ -137,6 +137,7 @@ Git에서 제외하는 항목:
 
 ## 다음 작업 후보
 
+- [docs/development_plan.md](docs/development_plan.md)에 정리된 순서대로 deterministic graph propagation baseline을 먼저 구현한다.
 - 입력 스키마 정의: retrieval result, query call graph, reference call graph.
 - 후보 belief 모델 정의: semantic/numeric/symbolic score와 graph score 결합 방식.
 - propagation rule 설계: caller, callee, mutual edge, path neighborhood.

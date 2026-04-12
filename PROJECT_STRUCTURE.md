@@ -10,7 +10,8 @@ lua_callgraph_propagation_agent/
 ├── README.md
 ├── PROJECT_STRUCTURE.md
 ├── docs/
-│   └── callgraph_propagation_agent_design.md
+│   ├── callgraph_propagation_agent_design.md
+│   └── development_plan.md
 ├── scripts/
 │   └── .gitkeep
 ├── src/
