@@ -11,7 +11,8 @@ lua_callgraph_propagation_agent/
 ├── PROJECT_STRUCTURE.md
 ├── docs/
 │   ├── callgraph_propagation_agent_design.md
-│   └── development_plan.md
+│   ├── development_plan.md
+│   └── input_schema.md
 ├── scripts/
 │   └── .gitkeep
 ├── src/

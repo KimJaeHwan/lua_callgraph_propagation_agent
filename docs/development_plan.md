@@ -20,6 +20,8 @@
 - `docs/input_schema.md`
 - 작은 fixture JSON
 
+현재 입력 스키마 결정사항은 `docs/input_schema.md`에 정리한다.
+
 ## 2. Graph Loader 구현
 
 Call graph JSON을 내부 구조로 읽는 모듈을 만든다.
