@@ -1,0 +1,61 @@
+{
+  "schema_version": "0.1",
+  "graph_id": "query_minimal_x86_64",
+  "graph_type": "query",
+  "description": "Minimal query graph for testing propagation from known callee anchors to an ambiguous query function.",
+  "nodes": [
+    {
+      "function_id": "query::00119970",
+      "function_name": "sub_00119970",
+      "entry_point": "00119970",
+      "metadata": {
+        "architecture": "x86_64",
+        "role_hint": "ambiguous_vm_or_lexer_candidate"
+      }
+    },
+    {
+      "function_id": "query::0011A010",
+      "function_name": "sub_0011A010",
+      "entry_point": "0011A010",
+      "metadata": {
+        "architecture": "x86_64",
+        "role_hint": "anchor_callee"
+      }
+    },
+    {
+      "function_id": "query::0011B020",
+      "function_name": "sub_0011B020",
+      "entry_point": "0011B020",
+      "metadata": {
+        "architecture": "x86_64",
+        "role_hint": "anchor_callee"
+      }
+    },
+    {
+      "function_id": "query::0011C030",
+      "function_name": "sub_0011C030",
+      "entry_point": "0011C030",
+      "metadata": {
+        "architecture": "x86_64",
+        "role_hint": "custom_extra_callee"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "src": "query::00119970",
+      "dst": "query::0011A010",
+      "edge_type": "calls"
+    },
+    {
+      "src": "query::00119970",
+      "dst": "query::0011B020",
+      "edge_type": "calls"
+    },
+    {
+      "src": "query::00119970",
+      "dst": "query::0011C030",
+      "edge_type": "calls"
+    }
+  ]
+}

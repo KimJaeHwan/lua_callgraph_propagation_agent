@@ -31,6 +31,8 @@ data/outputs/mappings/**
 data/eval/**
 !data/eval/
 !data/eval/.gitkeep
+!data/eval/fixtures/
+!data/eval/fixtures/*.json
 
 data/tmp/**
 !data/tmp/
@@ -38,6 +40,7 @@ data/tmp/**
 
 # Local databases / large artifacts
 *.sqlite3
+*.sqlite
 *.db
 *.pkl
 *.npy

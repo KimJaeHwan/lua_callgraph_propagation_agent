@@ -1,0 +1,28 @@
+{
+  "schema_version": "0.1",
+  "description": "Minimal anchors used to promote luaV_execute for query::00119970 via callee consistency.",
+  "mappings": [
+    {
+      "query_function_id": "query::0011A010",
+      "reference_function_id": "ref::Lua_547::luaD_precall",
+      "reference_function_name": "luaD_precall",
+      "confidence": 0.96,
+      "source": "retrieval_high_confidence",
+      "status": "accepted",
+      "evidence": [
+        "minimal_fixture_anchor"
+      ]
+    },
+    {
+      "query_function_id": "query::0011B020",
+      "reference_function_id": "ref::Lua_547::luaT_trybinTM",
+      "reference_function_name": "luaT_trybinTM",
+      "confidence": 0.94,
+      "source": "manual_seed",
+      "status": "accepted",
+      "evidence": [
+        "minimal_fixture_anchor"
+      ]
+    }
+  ]
+}

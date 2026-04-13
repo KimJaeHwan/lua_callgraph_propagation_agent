@@ -28,7 +28,12 @@ lua_callgraph_propagation_agent/
 │   │   └── mappings/
 │   │       └── .gitkeep
 │   ├── eval/
-│   │   └── .gitkeep
+│   │   ├── .gitkeep
+│   │   └── fixtures/
+│   │       ├── anchor_mapping_minimal.json
+│   │       ├── query_callgraph_minimal.json
+│   │       ├── reference_callgraph_minimal.json
+│   │       └── retrieval_topk_minimal.json
 │   └── tmp/
 │       └── .gitkeep
 └── tests/
@@ -46,11 +51,13 @@ lua_callgraph_propagation_agent/
 - `data/inputs/retrieval_results/`
   - `lua_function_embedding`에서 생성한 retrieval top-k JSON을 입력으로 둔다.
 - `data/inputs/callgraphs/`
-  - query binary와 reference Lua 함수 집합의 call graph JSON을 둔다.
+  - query binary와 reference Lua 함수 집합의 call graph 입력을 둔다.
+  - 실제 vanilla reference graph는 SQLite edge-list 형태의 `reference_callgraph.sqlite`로 생성해 사용한다.
 - `data/outputs/mappings/`
   - Agent가 생성한 final mapping 또는 intermediate mapping 결과를 저장한다.
 - `data/eval/`
   - propagation 평가 case, expected mapping, result summary를 둔다.
+  - `fixtures/`에는 입력 스키마와 graph propagation baseline을 검증하기 위한 작은 toy case를 둔다.
 - `data/tmp/`
   - 중간 변환 파일이나 임시 실험 결과를 둔다.
 - `tests/`

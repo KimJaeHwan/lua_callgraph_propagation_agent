@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1",
+  "source": "lua_function_embedding",
+  "retrieval_mode": "jaccard",
+  "candidate_policy": "unique_function_name_topk",
+  "description": "Minimal toy case where retrieval slightly prefers llex, but graph evidence should promote luaV_execute.",
+  "queries": [
+    {
+      "query_function_id": "query::00119970",
+      "query_function_name": "sub_00119970",
+      "metadata": {
+        "architecture": "x86_64",
+        "source_json": "data/eval/fixtures/query_callgraph_minimal.json"
+      },
+      "candidates": [
+        {
+          "candidate_function_id": "ref::Lua_547::llex",
+          "candidate_function_name": "llex",
+          "rank": 1,
+          "score_total": 0.711,
+          "score_breakdown": {
+            "symbolic": 0.28,
+            "numeric": 0.75,
+            "semantic": 0.8
+          }
+        },
+        {
+          "candidate_function_id": "ref::Lua_547::luaV_execute",
+          "candidate_function_name": "luaV_execute",
+          "rank": 2,
+          "score_total": 0.709,
+          "score_breakdown": {
+            "symbolic": 0.31,
+            "numeric": 0.72,
+            "semantic": 0.81
+          }
+        },
+        {
+          "candidate_function_id": "ref::Lua_547::luaD_rawrunprotected",
+          "candidate_function_name": "luaD_rawrunprotected",
+          "rank": 3,
+          "score_total": 0.641,
+          "score_breakdown": {
+            "symbolic": 0.19,
+            "numeric": 0.69,
+            "semantic": 0.72
+          }
+        }
+      ],
+      "raw_candidates": []
+    }
+  ]
+}

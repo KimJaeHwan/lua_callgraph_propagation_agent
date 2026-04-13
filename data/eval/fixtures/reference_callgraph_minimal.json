@@ -1,0 +1,91 @@
+{
+  "schema_version": "0.1",
+  "graph_id": "lua_547_reference_minimal",
+  "graph_type": "reference",
+  "description": "Minimal reference graph where luaV_execute matches the anchored callees while llex points to lexical analysis callees.",
+  "nodes": [
+    {
+      "function_id": "ref::Lua_547::luaV_execute",
+      "function_name": "luaV_execute",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "lvm.c"
+      }
+    },
+    {
+      "function_id": "ref::Lua_547::luaD_precall",
+      "function_name": "luaD_precall",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "ldo.c"
+      }
+    },
+    {
+      "function_id": "ref::Lua_547::luaT_trybinTM",
+      "function_name": "luaT_trybinTM",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "ltm.c"
+      }
+    },
+    {
+      "function_id": "ref::Lua_547::llex",
+      "function_name": "llex",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "llex.c"
+      }
+    },
+    {
+      "function_id": "ref::Lua_547::luaX_newstring",
+      "function_name": "luaX_newstring",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "llex.c"
+      }
+    },
+    {
+      "function_id": "ref::Lua_547::inclinenumber",
+      "function_name": "inclinenumber",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "llex.c"
+      }
+    },
+    {
+      "function_id": "ref::Lua_547::luaD_rawrunprotected",
+      "function_name": "luaD_rawrunprotected",
+      "metadata": {
+        "lua_version": "Lua_547",
+        "source_file": "ldo.c"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "src": "ref::Lua_547::luaV_execute",
+      "dst": "ref::Lua_547::luaD_precall",
+      "edge_type": "calls"
+    },
+    {
+      "src": "ref::Lua_547::luaV_execute",
+      "dst": "ref::Lua_547::luaT_trybinTM",
+      "edge_type": "calls"
+    },
+    {
+      "src": "ref::Lua_547::llex",
+      "dst": "ref::Lua_547::luaX_newstring",
+      "edge_type": "calls"
+    },
+    {
+      "src": "ref::Lua_547::llex",
+      "dst": "ref::Lua_547::inclinenumber",
+      "edge_type": "calls"
+    },
+    {
+      "src": "ref::Lua_547::luaD_rawrunprotected",
+      "dst": "ref::Lua_547::luaD_precall",
+      "edge_type": "calls"
+    }
+  ]
+}

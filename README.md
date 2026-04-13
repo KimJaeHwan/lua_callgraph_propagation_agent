@@ -61,7 +61,7 @@ Function feature extraction
 ```text
 retrieval_topk.json
   + query_callgraph.json
-  + reference_callgraph.json
+  + reference_callgraph.sqlite
   -> normalize graph ids
   -> initialize candidate beliefs
   -> propagate confidence from anchors
@@ -114,6 +114,7 @@ Local LLM은 최종 판정자가 아니라 애매한 함수에 대한 analyst as
 - `src/lua_callgraph_propagation_agent/`: 향후 패키지화할 핵심 모듈.
 - `data/inputs/retrieval_results/`: `lua_function_embedding`에서 생성한 top-k retrieval 결과 입력.
 - `data/inputs/callgraphs/`: query/reference call graph 입력.
+- `data/inputs/callgraphs/reference_callgraph.sqlite`: vanilla reference graph를 edge-list로 저장하는 실제 조회용 DB.
 - `data/outputs/mappings/`: Agent가 생성한 mapping 결과.
 - `data/eval/`: propagation 평가 case와 결과.
 - `data/tmp/`: 임시 변환 파일.
@@ -139,6 +140,7 @@ Git에서 제외하는 항목:
 
 - [docs/development_plan.md](docs/development_plan.md)에 정리된 순서대로 deterministic graph propagation baseline을 먼저 구현한다.
 - 입력 스키마 정의: retrieval result, query call graph, reference call graph.
+- Call graph 저장 설계: SQLite edge-list 기반 reference graph store.
 - 후보 belief 모델 정의: semantic/numeric/symbolic score와 graph score 결합 방식.
 - propagation rule 설계: caller, callee, mutual edge, path neighborhood.
 - local LLM analyst 입력/출력 스키마 정의.
