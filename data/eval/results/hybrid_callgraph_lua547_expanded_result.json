@@ -12,6 +12,12 @@
     ]
   },
   "candidate_source": "unique_topk_preview",
+  "candidate_expansion": {
+    "enabled": false,
+    "default_prior": 0.65,
+    "max_candidates_per_case": 80,
+    "description": "Graph-expanded candidates are added from reference functions connected to visible caller/callee anchors. This is candidate generation, not a proof of identity."
+  },
   "scoring": {
     "primary_opt": "O0",
     "strip_mode": "nostrip",
@@ -23,6 +29,10 @@
     "num_cases": 40,
     "retrieval_top1_accuracy": 0.95,
     "propagation_top1_accuracy": 0.975,
+    "propagation_top3_accuracy": 0.975,
+    "propagation_top5_accuracy": 0.975,
+    "retrieval_candidate_recall": 0.975,
+    "expanded_candidate_recall": 0.975,
     "improved": 1,
     "regressed": 0
   },
@@ -31,6 +41,10 @@
       "num_cases": 20,
       "retrieval_top1_accuracy": 1.0,
       "propagation_top1_accuracy": 1.0,
+      "propagation_top3_accuracy": 1.0,
+      "propagation_top5_accuracy": 1.0,
+      "retrieval_candidate_recall": 1.0,
+      "expanded_candidate_recall": 1.0,
       "improved": 0,
       "regressed": 0
     },
@@ -38,6 +52,10 @@
       "num_cases": 20,
       "retrieval_top1_accuracy": 0.9,
       "propagation_top1_accuracy": 0.95,
+      "propagation_top3_accuracy": 0.95,
+      "propagation_top5_accuracy": 0.95,
+      "retrieval_candidate_recall": 0.95,
+      "expanded_candidate_recall": 0.95,
       "improved": 1,
       "regressed": 0
     }
@@ -54,8 +72,15 @@
       "propagation_top1": "luaV_execute",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 39,
         "caller_anchor_count": 4,
@@ -167,6 +192,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -182,8 +208,15 @@
       "propagation_top1": "lua_settop",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 1,
         "caller_anchor_count": 73,
@@ -310,6 +343,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -325,8 +359,15 @@
       "propagation_top1": "lua_type",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 57,
@@ -451,6 +492,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -466,8 +508,15 @@
       "propagation_top1": "lua_pushstring",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 2,
         "caller_anchor_count": 52,
@@ -595,6 +644,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -610,8 +660,15 @@
       "propagation_top1": "lua_pushinteger",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 44,
@@ -724,6 +781,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -739,8 +797,15 @@
       "propagation_top1": "luaL_checklstring",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 3,
         "caller_anchor_count": 37,
@@ -846,6 +911,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -861,8 +927,15 @@
       "propagation_top1": "luaG_runerror",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 4,
         "caller_anchor_count": 32,
@@ -960,6 +1033,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -975,8 +1049,15 @@
       "propagation_top1": "lua_tolstring",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 2,
         "caller_anchor_count": 33,
@@ -1072,6 +1153,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1087,8 +1169,15 @@
       "propagation_top1": "luaL_checkinteger",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 5,
         "caller_anchor_count": 28,
@@ -1180,6 +1269,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1195,8 +1285,15 @@
       "propagation_top1": "luaC_step",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 9,
         "caller_anchor_count": 21,
@@ -1282,6 +1379,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1297,8 +1395,15 @@
       "propagation_top1": "luaD_call",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 10,
         "caller_anchor_count": 13,
@@ -1370,6 +1475,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1385,8 +1491,15 @@
       "propagation_top1": "luaD_callnoyield",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 10,
         "caller_anchor_count": 14,
@@ -1460,6 +1573,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1475,8 +1589,15 @@
       "propagation_top1": "luaD_throw",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 1,
         "caller_anchor_count": 28,
@@ -1560,6 +1681,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1575,8 +1697,15 @@
       "propagation_top1": "luaD_reallocstack",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 2,
         "caller_anchor_count": 18,
@@ -1642,6 +1771,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1657,8 +1787,15 @@
       "propagation_top1": "luaS_newlstr",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 5,
         "caller_anchor_count": 19,
@@ -1732,6 +1869,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1747,8 +1885,15 @@
       "propagation_top1": "luaL_argerror",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 1,
@@ -1775,6 +1920,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O2/nostrip/x86_64_O2_nostrip_lua_lua_547_0108_20260405_123106.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1790,8 +1936,15 @@
       "propagation_top1": "luaL_checktype",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 1,
@@ -1818,6 +1971,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O2/nostrip/x86_64_O2_nostrip_lua_lua_547_0987_20260405_131511.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1833,8 +1987,15 @@
       "propagation_top1": "luaU_undump",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 0,
@@ -1857,6 +2018,7 @@
           "evidence": [],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0073_20260405_131923.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1872,8 +2034,15 @@
       "propagation_top1": "llex",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 10,
         "caller_anchor_count": 2,
@@ -1923,6 +2092,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -1938,8 +2108,15 @@
       "propagation_top1": "luaX_next",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 1,
         "caller_anchor_count": 11,
@@ -1989,6 +2166,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2004,8 +2182,15 @@
       "propagation_top1": "luaV_execute",
       "retrieval_top1_hit": false,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": true,
       "candidate_count": 2,
+      "retrieval_candidate_count": 2,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 39,
         "caller_anchor_count": 4,
@@ -2117,6 +2302,7 @@
           ],
           "original_rank": 2,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0044_20260405_131758.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         },
         {
@@ -2134,6 +2320,7 @@
           "evidence": [],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O1/nostrip/x86_64_O1_nostrip_lua_lua_547_0746_20260405_121334.json",
+          "candidate_source": "retrieval",
           "final_rank": 2
         }
       ]
@@ -2149,8 +2336,15 @@
       "propagation_top1": "lua_settop",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 1,
         "caller_anchor_count": 73,
@@ -2277,6 +2471,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0745_20260405_135840.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2292,8 +2487,15 @@
       "propagation_top1": "lua_type",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 57,
@@ -2418,6 +2620,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0112_20260405_132148.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2433,8 +2636,15 @@
       "propagation_top1": "lua_pushstring",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 2,
         "caller_anchor_count": 52,
@@ -2562,6 +2772,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0581_20260405_110630.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2577,8 +2788,15 @@
       "propagation_top1": "lua_pushinteger",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 44,
@@ -2691,6 +2909,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0493_20260405_134345.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2706,8 +2925,15 @@
       "propagation_top1": "luaL_checklstring",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 3,
         "caller_anchor_count": 37,
@@ -2813,6 +3039,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0373_20260405_133700.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2828,8 +3055,15 @@
       "propagation_top1": "luaG_runerror",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 4,
         "caller_anchor_count": 32,
@@ -2927,6 +3161,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O2/nostrip/x86_64_O2_nostrip_lua_lua_547_0311_20260405_124101.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -2942,8 +3177,15 @@
       "propagation_top1": "lua_tolstring",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 2,
         "caller_anchor_count": 33,
@@ -3039,6 +3281,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0874_20260405_140551.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3054,8 +3297,15 @@
       "propagation_top1": "luaL_checkinteger",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 5,
         "caller_anchor_count": 28,
@@ -3147,6 +3397,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0885_20260405_140622.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3162,8 +3413,15 @@
       "propagation_top1": "luaC_step",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 9,
         "caller_anchor_count": 21,
@@ -3249,6 +3507,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0001_20260405_131547.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3264,8 +3523,15 @@
       "propagation_top1": "luaD_call",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 10,
         "caller_anchor_count": 13,
@@ -3337,6 +3603,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0110_20260405_132147.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3352,8 +3619,15 @@
       "propagation_top1": "luaD_callnoyield",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 10,
         "caller_anchor_count": 14,
@@ -3427,6 +3701,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0004_20260405_131554.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3442,8 +3717,15 @@
       "propagation_top1": "luaD_throw",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 1,
         "caller_anchor_count": 28,
@@ -3527,6 +3809,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0495_20260405_134347.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3542,8 +3825,15 @@
       "propagation_top1": "luaD_reallocstack",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 2,
         "caller_anchor_count": 18,
@@ -3609,6 +3899,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0109_20260405_132148.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3624,8 +3915,15 @@
       "propagation_top1": "luaS_newlstr",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 5,
         "caller_anchor_count": 19,
@@ -3699,6 +3997,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0989_20260405_141232.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3714,8 +4013,15 @@
       "propagation_top1": "luaL_argerror",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 1,
@@ -3742,6 +4048,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0033_20260405_102209.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3757,8 +4064,15 @@
       "propagation_top1": "callbinTM",
       "retrieval_top1_hit": false,
       "propagation_top1_hit": false,
+      "propagation_top3_hit": false,
+      "propagation_top5_hit": false,
+      "expected_final_rank": null,
+      "expected_in_retrieval_candidates": false,
+      "expected_in_candidates": false,
       "top1_changed": false,
       "candidate_count": 3,
+      "retrieval_candidate_count": 3,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 1,
@@ -3783,6 +4097,7 @@
           "evidence": [],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0321_20260405_104427.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         },
         {
@@ -3800,6 +4115,7 @@
           "evidence": [],
           "original_rank": 2,
           "source_json": "data/raw_features/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0033_20260405_102209.json",
+          "candidate_source": "retrieval",
           "final_rank": 2
         },
         {
@@ -3817,6 +4133,7 @@
           "evidence": [],
           "original_rank": 3,
           "source_json": "data/raw_features/Lua_547/x86_64/O2/nostrip/x86_64_O2_nostrip_lua_lua_547_0657_20260405_125755.json",
+          "candidate_source": "retrieval",
           "final_rank": 3
         }
       ]
@@ -3832,8 +4149,15 @@
       "propagation_top1": "luaU_undump",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 0,
         "caller_anchor_count": 0,
@@ -3856,6 +4180,7 @@
           "evidence": [],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0703_20260405_135529.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3871,8 +4196,15 @@
       "propagation_top1": "llex",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 10,
         "caller_anchor_count": 2,
@@ -3922,6 +4254,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0377_20260405_133711.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
@@ -3937,8 +4270,15 @@
       "propagation_top1": "luaX_next",
       "retrieval_top1_hit": true,
       "propagation_top1_hit": true,
+      "propagation_top3_hit": true,
+      "propagation_top5_hit": true,
+      "expected_final_rank": 1,
+      "expected_in_retrieval_candidates": true,
+      "expected_in_candidates": true,
       "top1_changed": false,
       "candidate_count": 1,
+      "retrieval_candidate_count": 1,
+      "expanded_candidate_count": 0,
       "anchor_summary": {
         "callee_anchor_count": 1,
         "caller_anchor_count": 11,
@@ -3988,6 +4328,7 @@
           ],
           "original_rank": 1,
           "source_json": "data/raw_features/Lua_547/x86_64/O3/nostrip/x86_64_O3_nostrip_lua_lua_547_0249_20260405_132942.json",
+          "candidate_source": "retrieval",
           "final_rank": 1
         }
       ]
