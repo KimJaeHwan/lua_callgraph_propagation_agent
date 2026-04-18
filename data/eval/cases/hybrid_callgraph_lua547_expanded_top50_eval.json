@@ -1,0 +1,185 @@
+{
+  "schema_version": "0.1",
+  "suite_name": "hybrid_callgraph_lua547_expanded_top50_eval",
+  "description": "Expanded topk=50 evaluation of lua_function_embedding retrieval results with SQLite callgraph score correction.",
+  "embedding_project_root": "../lua_function_embedding",
+  "retrieval_result_json": "../lua_function_embedding/data/eval/tmp/result_expanded_callgraph_top50.json",
+  "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+  "output_json": "data/eval/results/hybrid_callgraph_lua547_expanded_top50_result.json",
+  "candidate_source": "unique_topk_preview",
+  "anchor_policy": {
+    "type": "known_named_query_neighbors",
+    "description": "Use query caller/callee names that remain visible and exist in the vanilla reference DB as temporary anchors for integration evaluation.",
+    "exclude_prefixes": [
+      "FUNC_",
+      "FUN_",
+      "sub_"
+    ]
+  },
+  "scoring": {
+    "primary_opt": "O0",
+    "strip_mode": "nostrip"
+  },
+  "cases": [
+    {
+      "case_id": "x86_masked_luaV_execute",
+      "expected_function": "luaV_execute"
+    },
+    {
+      "case_id": "x86_masked_lua_settop",
+      "expected_function": "lua_settop"
+    },
+    {
+      "case_id": "x86_masked_lua_type",
+      "expected_function": "lua_type"
+    },
+    {
+      "case_id": "x86_masked_lua_pushstring",
+      "expected_function": "lua_pushstring"
+    },
+    {
+      "case_id": "x86_masked_lua_pushinteger",
+      "expected_function": "lua_pushinteger"
+    },
+    {
+      "case_id": "x86_masked_luaL_checklstring",
+      "expected_function": "luaL_checklstring"
+    },
+    {
+      "case_id": "x86_masked_luaG_runerror",
+      "expected_function": "luaG_runerror"
+    },
+    {
+      "case_id": "x86_masked_lua_tolstring",
+      "expected_function": "lua_tolstring"
+    },
+    {
+      "case_id": "x86_masked_luaL_checkinteger",
+      "expected_function": "luaL_checkinteger"
+    },
+    {
+      "case_id": "x86_masked_luaC_step",
+      "expected_function": "luaC_step"
+    },
+    {
+      "case_id": "x86_masked_luaD_call",
+      "expected_function": "luaD_call"
+    },
+    {
+      "case_id": "x86_masked_luaD_callnoyield",
+      "expected_function": "luaD_callnoyield"
+    },
+    {
+      "case_id": "x86_masked_luaD_throw",
+      "expected_function": "luaD_throw"
+    },
+    {
+      "case_id": "x86_masked_luaD_reallocstack",
+      "expected_function": "luaD_reallocstack"
+    },
+    {
+      "case_id": "x86_masked_luaS_newlstr",
+      "expected_function": "luaS_newlstr"
+    },
+    {
+      "case_id": "x86_masked_luaL_argerror",
+      "expected_function": "luaL_argerror"
+    },
+    {
+      "case_id": "x86_masked_luaL_checktype",
+      "expected_function": "luaL_checktype"
+    },
+    {
+      "case_id": "x86_masked_luaU_undump",
+      "expected_function": "luaU_undump"
+    },
+    {
+      "case_id": "x86_masked_llex",
+      "expected_function": "llex"
+    },
+    {
+      "case_id": "x86_masked_luaX_next",
+      "expected_function": "luaX_next"
+    },
+    {
+      "case_id": "arm_to_x86_luaV_execute",
+      "expected_function": "luaV_execute"
+    },
+    {
+      "case_id": "arm_to_x86_lua_settop",
+      "expected_function": "lua_settop"
+    },
+    {
+      "case_id": "arm_to_x86_lua_type",
+      "expected_function": "lua_type"
+    },
+    {
+      "case_id": "arm_to_x86_lua_pushstring",
+      "expected_function": "lua_pushstring"
+    },
+    {
+      "case_id": "arm_to_x86_lua_pushinteger",
+      "expected_function": "lua_pushinteger"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checklstring",
+      "expected_function": "luaL_checklstring"
+    },
+    {
+      "case_id": "arm_to_x86_luaG_runerror",
+      "expected_function": "luaG_runerror"
+    },
+    {
+      "case_id": "arm_to_x86_lua_tolstring",
+      "expected_function": "lua_tolstring"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checkinteger",
+      "expected_function": "luaL_checkinteger"
+    },
+    {
+      "case_id": "arm_to_x86_luaC_step",
+      "expected_function": "luaC_step"
+    },
+    {
+      "case_id": "arm_to_x86_luaD_call",
+      "expected_function": "luaD_call"
+    },
+    {
+      "case_id": "arm_to_x86_luaD_callnoyield",
+      "expected_function": "luaD_callnoyield"
+    },
+    {
+      "case_id": "arm_to_x86_luaD_throw",
+      "expected_function": "luaD_throw"
+    },
+    {
+      "case_id": "arm_to_x86_luaD_reallocstack",
+      "expected_function": "luaD_reallocstack"
+    },
+    {
+      "case_id": "arm_to_x86_luaS_newlstr",
+      "expected_function": "luaS_newlstr"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_argerror",
+      "expected_function": "luaL_argerror"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checktype",
+      "expected_function": "luaL_checktype"
+    },
+    {
+      "case_id": "arm_to_x86_luaU_undump",
+      "expected_function": "luaU_undump"
+    },
+    {
+      "case_id": "arm_to_x86_llex",
+      "expected_function": "llex"
+    },
+    {
+      "case_id": "arm_to_x86_luaX_next",
+      "expected_function": "luaX_next"
+    }
+  ]
+}

@@ -244,3 +244,49 @@ data/inputs/callgraphs/reference_callgraph.sqlite
 ```bash
 python3 scripts/01_build_reference_callgraph_db.py --list-only
 ```
+
+## 10. Scoring MVP 실행
+
+생성된 `reference_callgraph.sqlite`를 사용해 retrieval 후보를 call graph evidence로 재랭킹한다.
+
+```bash
+python3 scripts/02_score_with_callgraph.py \
+  --expected query::00119970=luaV_execute \
+  --output-json data/eval/fixtures/result_callgraph_minimal.json
+```
+
+Minimal fixture의 의도는 retrieval 점수만으로는 `llex`가 근소하게 앞서지만, anchor callee evidence로 `luaV_execute`를 승격시키는 것이다.
+
+```text
+retrieval top-1:
+  llex
+
+propagation top-1:
+  luaV_execute
+
+graph evidence:
+  luaV_execute -> luaD_precall
+  luaV_execute -> luaT_trybinTM
+```
+
+## 11. 실제 Retrieval 결과 평가
+
+`lua_function_embedding`의 `result_dir_index.json`를 입력으로 받아 실제 8개 평가 케이스에 callgraph score correction을 적용한다.
+
+```bash
+python3 scripts/03_eval_hybrid_callgraph_cases.py \
+  --suite data/eval/cases/hybrid_callgraph_lua547_eval.json
+```
+
+현재 평가는 query feature에 남아 있는 caller/callee 이름 중 vanilla reference DB에 존재하는 이름을 temporary anchor로 사용한다. 이 정책은 통합 파이프라인 검증용이며, 완전 블라인드 평가는 아니다.
+
+결과:
+
+```text
+retrieval_top1_accuracy   = 0.75
+propagation_top1_accuracy = 0.875
+improved                  = 1
+regressed                 = 0
+```
+
+이 결과는 callgraph score가 retrieval 후보를 생성하는 것이 아니라, retrieval 후보 안에서 재랭킹한다는 점을 보여준다. expected function이 후보 목록에 없는 케이스는 이 단계만으로 복구할 수 없다.

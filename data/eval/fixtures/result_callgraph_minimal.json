@@ -1,0 +1,106 @@
+{
+  "schema_version": "0.1",
+  "mode": "deterministic_callgraph_propagation_mvp",
+  "inputs": {
+    "retrieval": "data/eval/fixtures/retrieval_topk_minimal.json",
+    "query_graph": "data/eval/fixtures/query_callgraph_minimal.json",
+    "anchors": "data/eval/fixtures/anchor_mapping_minimal.json",
+    "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite"
+  },
+  "scoring": {
+    "primary_opt": "O0",
+    "strip_mode": "nostrip",
+    "primary_edge_bonus": 0.04,
+    "auxiliary_edge_bonus": 0.015,
+    "missing_anchor_penalty": 0.002
+  },
+  "metrics": {
+    "expected_count": 1,
+    "retrieval_top1_accuracy": 0.0,
+    "propagation_top1_accuracy": 1.0,
+    "improved": 1,
+    "regressed": 0
+  },
+  "results": [
+    {
+      "query_function_id": "query::00119970",
+      "query_function_name": "sub_00119970",
+      "architecture": "x86_64",
+      "expected_function_name": "luaV_execute",
+      "retrieval_top1": "llex",
+      "propagation_top1": "luaV_execute",
+      "top1_changed": true,
+      "candidates": [
+        {
+          "candidate_function_name": "luaV_execute",
+          "retrieval_prior": 0.709,
+          "graph_score": 0.08,
+          "final_score": 0.789,
+          "graph_breakdown": {
+            "primary_matches": 2,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "unknown_extra_neighbors": 1,
+            "primary_edge_bonus": 0.04,
+            "auxiliary_edge_bonus": 0.015,
+            "missing_anchor_penalty": 0.002
+          },
+          "evidence": [
+            "primary_callee_anchor_match:luaV_execute->luaD_precall",
+            "primary_callee_anchor_match:luaV_execute->luaT_trybinTM",
+            "unanchored_query_callee:query::0011C030"
+          ],
+          "custom_suspected": true,
+          "original_rank": 2,
+          "final_rank": 1
+        },
+        {
+          "candidate_function_name": "llex",
+          "retrieval_prior": 0.711,
+          "graph_score": -0.004,
+          "final_score": 0.707,
+          "graph_breakdown": {
+            "primary_matches": 0,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 2,
+            "unknown_extra_neighbors": 1,
+            "primary_edge_bonus": 0.04,
+            "auxiliary_edge_bonus": 0.015,
+            "missing_anchor_penalty": 0.002
+          },
+          "evidence": [
+            "missing_callee_anchor_edge:llex->luaD_precall",
+            "missing_callee_anchor_edge:llex->luaT_trybinTM",
+            "unanchored_query_callee:query::0011C030"
+          ],
+          "custom_suspected": true,
+          "original_rank": 1,
+          "final_rank": 2
+        },
+        {
+          "candidate_function_name": "luaD_rawrunprotected",
+          "retrieval_prior": 0.641,
+          "graph_score": -0.004,
+          "final_score": 0.637,
+          "graph_breakdown": {
+            "primary_matches": 0,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 2,
+            "unknown_extra_neighbors": 1,
+            "primary_edge_bonus": 0.04,
+            "auxiliary_edge_bonus": 0.015,
+            "missing_anchor_penalty": 0.002
+          },
+          "evidence": [
+            "missing_callee_anchor_edge:luaD_rawrunprotected->luaD_precall",
+            "missing_callee_anchor_edge:luaD_rawrunprotected->luaT_trybinTM",
+            "unanchored_query_callee:query::0011C030"
+          ],
+          "custom_suspected": true,
+          "original_rank": 3,
+          "final_rank": 3
+        }
+      ]
+    }
+  ]
+}

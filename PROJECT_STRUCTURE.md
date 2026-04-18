@@ -16,7 +16,9 @@ lua_callgraph_propagation_agent/
 │   └── input_schema.md
 ├── scripts/
 │   ├── .gitkeep
-│   └── 01_build_reference_callgraph_db.py
+│   ├── 01_build_reference_callgraph_db.py
+│   ├── 02_score_with_callgraph.py
+│   └── 03_eval_hybrid_callgraph_cases.py
 ├── src/
 │   └── lua_callgraph_propagation_agent/
 │       └── __init__.py
@@ -31,11 +33,16 @@ lua_callgraph_propagation_agent/
 │   │       └── .gitkeep
 │   ├── eval/
 │   │   ├── .gitkeep
-│   │   └── fixtures/
+│   │   ├── cases/
+│   │   │   └── hybrid_callgraph_lua547_eval.json
+│   │   ├── fixtures/
 │   │       ├── anchor_mapping_minimal.json
 │   │       ├── query_callgraph_minimal.json
 │   │       ├── reference_callgraph_minimal.json
-│   │       └── retrieval_topk_minimal.json
+│   │       ├── retrieval_topk_minimal.json
+│   │       └── result_callgraph_minimal.json
+│   │   └── results/
+│   │       └── hybrid_callgraph_lua547_result.json
 │   └── tmp/
 │       └── .gitkeep
 └── tests/
@@ -59,7 +66,9 @@ lua_callgraph_propagation_agent/
   - Agent가 생성한 final mapping 또는 intermediate mapping 결과를 저장한다.
 - `data/eval/`
   - propagation 평가 case, expected mapping, result summary를 둔다.
+  - `cases/`에는 실제 retrieval 결과와 callgraph 보정 평가를 연결하는 suite 파일을 둔다.
   - `fixtures/`에는 입력 스키마와 graph propagation baseline을 검증하기 위한 작은 toy case를 둔다.
+  - `results/`에는 작은 평가 결과 JSON을 둔다.
 - `data/tmp/`
   - 중간 변환 파일이나 임시 실험 결과를 둔다.
 - `tests/`

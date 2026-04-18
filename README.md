@@ -136,6 +136,47 @@ python3 scripts/01_build_reference_callgraph_db.py --replace
 python3 scripts/01_build_reference_callgraph_db.py --list-only
 ```
 
+## Call Graph Scoring MVP
+
+Retrieval top-k 후보를 query call graph anchor와 SQLite reference graph로 재랭킹한다.
+
+```bash
+python3 scripts/02_score_with_callgraph.py \
+  --expected query::00119970=luaV_execute \
+  --output-json data/eval/fixtures/result_callgraph_minimal.json
+```
+
+현재 minimal fixture에서는 retrieval-only가 `llex`를 top-1로 선택하지만, call graph evidence를 적용하면 `luaV_execute`가 top-1로 올라온다.
+
+```text
+retrieval_top1_accuracy   = 0.0
+propagation_top1_accuracy = 1.0
+improved                  = 1
+regressed                 = 0
+```
+
+## Hybrid Retrieval + Call Graph 평가
+
+`lua_function_embedding`의 실제 retrieval 평가 결과를 받아 callgraph score correction을 적용한다.
+
+```bash
+python3 scripts/03_eval_hybrid_callgraph_cases.py \
+  --suite data/eval/cases/hybrid_callgraph_lua547_eval.json
+```
+
+이 평가는 `lua_function_embedding/data/eval/result_dir_index.json`의 `unique_topk_preview`를 retrieval 후보로 사용한다. Query feature에 남아 있는 caller/callee 이름 중 vanilla reference DB에 존재하는 이름을 임시 anchor로 사용한다.
+
+현재 8개 Lua 5.4.7 평가 케이스 기준 결과:
+
+```text
+retrieval_top1_accuracy   = 0.75
+propagation_top1_accuracy = 0.875
+improved                  = 1
+regressed                 = 0
+```
+
+`arm_to_x86_luaV_execute`는 retrieval-only에서 `llex`가 top-1이었지만, callgraph evidence 적용 후 `luaV_execute`로 재랭킹된다. `arm_to_x86_luaL_checktype`은 expected function이 retrieval 후보 목록에 없어서 callgraph 재랭킹만으로는 복구되지 않는다.
+
 ## Git 관리 방침
 
 Git에 포함하는 항목:

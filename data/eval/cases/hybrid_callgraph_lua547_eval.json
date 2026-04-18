@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1",
+  "suite_name": "hybrid_callgraph_lua547_eval",
+  "description": "Evaluate lua_function_embedding retrieval results with SQLite callgraph score correction.",
+  "embedding_project_root": "../lua_function_embedding",
+  "retrieval_result_json": "../lua_function_embedding/data/eval/result_dir_index.json",
+  "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+  "output_json": "data/eval/results/hybrid_callgraph_lua547_result.json",
+  "candidate_source": "unique_topk_preview",
+  "anchor_policy": {
+    "type": "known_named_query_neighbors",
+    "description": "Use query caller/callee names that remain visible and exist in the vanilla reference DB as temporary anchors for integration evaluation.",
+    "exclude_prefixes": [
+      "FUNC_",
+      "FUN_",
+      "sub_"
+    ]
+  },
+  "scoring": {
+    "primary_opt": "O0",
+    "strip_mode": "nostrip"
+  },
+  "cases": [
+    {
+      "case_id": "x86_masked_luaV_execute",
+      "expected_function": "luaV_execute"
+    },
+    {
+      "case_id": "x86_masked_luaU_undump",
+      "expected_function": "luaU_undump"
+    },
+    {
+      "case_id": "x86_masked_luaL_argerror",
+      "expected_function": "luaL_argerror"
+    },
+    {
+      "case_id": "x86_masked_luaL_checktype",
+      "expected_function": "luaL_checktype"
+    },
+    {
+      "case_id": "arm_to_x86_luaV_execute",
+      "expected_function": "luaV_execute"
+    },
+    {
+      "case_id": "arm_to_x86_luaU_undump",
+      "expected_function": "luaU_undump"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_argerror",
+      "expected_function": "luaL_argerror"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checktype",
+      "expected_function": "luaL_checktype"
+    }
+  ]
+}

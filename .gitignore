@@ -31,8 +31,12 @@ data/outputs/mappings/**
 data/eval/**
 !data/eval/
 !data/eval/.gitkeep
+!data/eval/cases/
+!data/eval/cases/*.json
 !data/eval/fixtures/
 !data/eval/fixtures/*.json
+!data/eval/results/
+!data/eval/results/*.json
 
 data/tmp/**
 !data/tmp/
