@@ -1,0 +1,97 @@
+{
+  "schema_version": "0.1",
+  "description": "Compact tracked summary of callgraph propagation evaluation runs. Full root-level result JSON files are local ignored artifacts.",
+  "results": [
+    {
+      "source_file": "data/eval/results/hybrid_callgraph_lua547_result.json",
+      "suite_name": "hybrid_callgraph_lua547_eval",
+      "description": "Evaluate lua_function_embedding retrieval results with SQLite callgraph score correction.",
+      "summary": {
+        "num_cases": 8,
+        "retrieval_top1_accuracy": 0.75,
+        "propagation_top1_accuracy": 0.875,
+        "improved": 1,
+        "regressed": 0
+      }
+    },
+    {
+      "source_file": "data/eval/results/hybrid_callgraph_lua547_expanded_result.json",
+      "suite_name": "hybrid_callgraph_lua547_expanded_eval",
+      "description": "Expanded evaluation of lua_function_embedding retrieval results with SQLite callgraph score correction.",
+      "summary": {
+        "num_cases": 40,
+        "retrieval_top1_accuracy": 0.95,
+        "propagation_top1_accuracy": 0.975,
+        "propagation_top3_accuracy": 0.975,
+        "propagation_top5_accuracy": 0.975,
+        "retrieval_candidate_recall": 0.975,
+        "expanded_candidate_recall": 0.975,
+        "improved": 1,
+        "regressed": 0
+      },
+      "candidate_expansion": {
+        "enabled": false,
+        "default_prior": 0.65,
+        "max_candidates_per_case": 80,
+        "description": "Graph-expanded candidates are added from reference functions connected to visible caller/callee anchors. This is candidate generation, not a proof of identity."
+      }
+    },
+    {
+      "source_file": "data/eval/results/hybrid_callgraph_lua547_expanded_top50_result.json",
+      "suite_name": "hybrid_callgraph_lua547_expanded_top50_eval",
+      "description": "Expanded topk=50 evaluation of lua_function_embedding retrieval results with SQLite callgraph score correction.",
+      "summary": {
+        "num_cases": 40,
+        "retrieval_top1_accuracy": 0.95,
+        "propagation_top1_accuracy": 0.975,
+        "improved": 1,
+        "regressed": 0
+      }
+    },
+    {
+      "source_file": "data/eval/results/hybrid_callgraph_lua547_expanded_candidate_expansion_result.json",
+      "suite_name": "hybrid_callgraph_lua547_expanded_eval",
+      "description": "Expanded evaluation of lua_function_embedding retrieval results with SQLite callgraph score correction.",
+      "summary": {
+        "num_cases": 40,
+        "retrieval_top1_accuracy": 0.95,
+        "propagation_top1_accuracy": 0.975,
+        "propagation_top3_accuracy": 0.975,
+        "propagation_top5_accuracy": 1.0,
+        "retrieval_candidate_recall": 0.975,
+        "expanded_candidate_recall": 1.0,
+        "improved": 1,
+        "regressed": 0
+      },
+      "candidate_expansion": {
+        "enabled": true,
+        "default_prior": 0.65,
+        "max_candidates_per_case": 80,
+        "description": "Graph-expanded candidates are added from reference functions connected to visible caller/callee anchors. This is candidate generation, not a proof of identity."
+      }
+    },
+    {
+      "source_file": "data/eval/results/anchor_propagation_lua547_summary.json",
+      "suite_name": "anchor_propagation_lua547_eval",
+      "description": "Evaluate anchor-based callgraph propagation with accepted/deferred/conflict classification.",
+      "summary": {
+        "num_cases": 9,
+        "accepted": 7,
+        "deferred": 2,
+        "conflict": 0,
+        "expected_count": 9,
+        "top1_accuracy": 0.888889,
+        "top5_accuracy": 1.0
+      },
+      "candidate_expansion": {
+        "default_prior": 0.65,
+        "max_candidates_per_case": 80
+      },
+      "classification_policy": {
+        "accept_margin": 0.015,
+        "min_primary_matches": 1,
+        "max_tied_top_candidates": 1
+      }
+    }
+  ]
+}

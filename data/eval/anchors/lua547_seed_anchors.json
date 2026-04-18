@@ -1,0 +1,37 @@
+{
+  "schema_version": "0.1",
+  "description": "Seed anchors for Lua 5.4.7 propagation evaluation. These are intentionally minimal because the suite can optionally allow visible reference-name anchors for controlled eval fixtures.",
+  "mappings": [
+    {
+      "query_function_name": "luaV_execute",
+      "reference_function_name": "luaV_execute",
+      "confidence": 0.98,
+      "source": "retrieval_and_callgraph_agree",
+      "status": "accepted",
+      "evidence": [
+        "expanded_eval_top1_hit",
+        "strong_graph_context"
+      ]
+    },
+    {
+      "query_function_name": "lua_settop",
+      "reference_function_name": "lua_settop",
+      "confidence": 0.98,
+      "source": "retrieval_and_callgraph_agree",
+      "status": "accepted",
+      "evidence": [
+        "expanded_eval_top1_hit"
+      ]
+    },
+    {
+      "query_function_name": "lua_type",
+      "reference_function_name": "lua_type",
+      "confidence": 0.98,
+      "source": "retrieval_and_callgraph_agree",
+      "status": "accepted",
+      "evidence": [
+        "expanded_eval_top1_hit"
+      ]
+    }
+  ]
+}

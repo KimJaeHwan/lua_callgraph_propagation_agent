@@ -1,0 +1,189 @@
+{
+  "schema_version": "0.1",
+  "description": "Representative compact output for anchor propagation. Includes accepted/deferred decisions without full candidate traces.",
+  "suite_name": "anchor_propagation_lua547_eval",
+  "summary": {
+    "num_cases": 9,
+    "accepted": 7,
+    "deferred": 2,
+    "conflict": 0,
+    "expected_count": 9,
+    "top1_accuracy": 0.888889,
+    "top5_accuracy": 1.0
+  },
+  "accepted_cases": [
+    {
+      "case_id": "arm_to_x86_luaV_execute",
+      "query_func": "luaV_execute",
+      "expected_function": "luaV_execute",
+      "predicted_function_name": "luaV_execute",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "luaV_execute"
+      ],
+      "anchor_counts": {
+        "callee": 39,
+        "caller": 4
+      }
+    },
+    {
+      "case_id": "arm_to_x86_lua_settop",
+      "query_func": "lua_settop",
+      "expected_function": "lua_settop",
+      "predicted_function_name": "lua_settop",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "lua_settop"
+      ],
+      "anchor_counts": {
+        "callee": 1,
+        "caller": 73
+      }
+    },
+    {
+      "case_id": "arm_to_x86_lua_type",
+      "query_func": "lua_type",
+      "expected_function": "lua_type",
+      "predicted_function_name": "lua_type",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "lua_type"
+      ],
+      "anchor_counts": {
+        "callee": 0,
+        "caller": 57
+      }
+    },
+    {
+      "case_id": "arm_to_x86_lua_pushstring",
+      "query_func": "lua_pushstring",
+      "expected_function": "lua_pushstring",
+      "predicted_function_name": "lua_pushstring",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "lua_pushstring"
+      ],
+      "anchor_counts": {
+        "callee": 2,
+        "caller": 52
+      }
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checklstring",
+      "query_func": "luaL_checklstring",
+      "expected_function": "luaL_checklstring",
+      "predicted_function_name": "luaL_checklstring",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "luaL_checklstring"
+      ],
+      "anchor_counts": {
+        "callee": 3,
+        "caller": 37
+      }
+    },
+    {
+      "case_id": "arm_to_x86_llex",
+      "query_func": "llex",
+      "expected_function": "llex",
+      "predicted_function_name": "llex",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "llex"
+      ],
+      "anchor_counts": {
+        "callee": 10,
+        "caller": 2
+      }
+    },
+    {
+      "case_id": "arm_to_x86_luaX_next",
+      "query_func": "luaX_next",
+      "expected_function": "luaX_next",
+      "predicted_function_name": "luaX_next",
+      "status": "accepted",
+      "status_reasons": [
+        "accepted_by_margin_and_graph_evidence"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "luaX_next"
+      ],
+      "anchor_counts": {
+        "callee": 1,
+        "caller": 11
+      }
+    }
+  ],
+  "deferred_cases": [
+    {
+      "case_id": "arm_to_x86_luaL_checktype",
+      "query_func": "luaL_checktype",
+      "expected_function": "luaL_checktype",
+      "predicted_function_name": "lua_type",
+      "status": "deferred",
+      "status_reasons": [
+        "low_score_margin",
+        "multiple_candidates_same_final_score"
+      ],
+      "expected_final_rank": 4,
+      "top_tied_candidates": [
+        "lua_type",
+        "lua_settop",
+        "luaL_len",
+        "luaL_checktype",
+        "luaL_argerror",
+        "checktab",
+        "auxsort"
+      ],
+      "anchor_counts": {
+        "callee": 0,
+        "caller": 1
+      }
+    },
+    {
+      "case_id": "arm_to_x86_luaU_undump",
+      "query_func": "luaU_undump",
+      "expected_function": "luaU_undump",
+      "predicted_function_name": "luaU_undump",
+      "status": "deferred",
+      "status_reasons": [
+        "no_anchor_evidence",
+        "insufficient_primary_graph_matches"
+      ],
+      "expected_final_rank": 1,
+      "top_tied_candidates": [
+        "luaU_undump"
+      ],
+      "anchor_counts": {
+        "callee": 0,
+        "caller": 0
+      }
+    }
+  ],
+  "conflict_cases": []
+}

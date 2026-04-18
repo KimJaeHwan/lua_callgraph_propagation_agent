@@ -1,0 +1,73 @@
+{
+  "schema_version": "0.1",
+  "suite_name": "anchor_propagation_lua547_eval",
+  "description": "Evaluate anchor-based callgraph propagation with accepted/deferred/conflict classification.",
+  "embedding_project_root": "../lua_function_embedding",
+  "retrieval_result_json": "../lua_function_embedding/data/eval/tmp/result_expanded_callgraph.json",
+  "anchor_json": "data/eval/anchors/lua547_seed_anchors.json",
+  "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+  "output_json": "data/eval/results/anchor_propagation_lua547_summary.json",
+  "candidate_source": "unique_topk_preview",
+  "output_top_candidates": 5,
+  "anchor_policy": {
+    "type": "seed_anchors_plus_eval_visible_reference_names",
+    "description": "Use explicit seed anchors. For this controlled eval only, visible neighbor names that exist in the vanilla reference DB may also act as anchors.",
+    "allow_visible_reference_name_anchors": true,
+    "exclude_prefixes": [
+      "FUNC_",
+      "FUN_",
+      "sub_"
+    ]
+  },
+  "candidate_expansion": {
+    "default_prior": 0.65,
+    "max_candidates_per_case": 80
+  },
+  "scoring": {
+    "primary_opt": "O0",
+    "strip_mode": "nostrip"
+  },
+  "classification_policy": {
+    "accept_margin": 0.015,
+    "min_primary_matches": 1,
+    "max_tied_top_candidates": 1
+  },
+  "cases": [
+    {
+      "case_id": "arm_to_x86_luaV_execute",
+      "expected_function": "luaV_execute"
+    },
+    {
+      "case_id": "arm_to_x86_lua_settop",
+      "expected_function": "lua_settop"
+    },
+    {
+      "case_id": "arm_to_x86_lua_type",
+      "expected_function": "lua_type"
+    },
+    {
+      "case_id": "arm_to_x86_lua_pushstring",
+      "expected_function": "lua_pushstring"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checklstring",
+      "expected_function": "luaL_checklstring"
+    },
+    {
+      "case_id": "arm_to_x86_luaL_checktype",
+      "expected_function": "luaL_checktype"
+    },
+    {
+      "case_id": "arm_to_x86_luaU_undump",
+      "expected_function": "luaU_undump"
+    },
+    {
+      "case_id": "arm_to_x86_llex",
+      "expected_function": "llex"
+    },
+    {
+      "case_id": "arm_to_x86_luaX_next",
+      "expected_function": "luaX_next"
+    }
+  ]
+}

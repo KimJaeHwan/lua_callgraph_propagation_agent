@@ -124,6 +124,21 @@ anchors 선택
 
 초기 버전에서는 1-hop caller/callee만 사용한다. 2-hop 이상은 noise가 늘 수 있으므로 baseline 이후에 추가한다.
 
+현재 MVP 구현:
+
+- `scripts/04_propagate_from_anchors.py`
+- 입력 suite: `data/eval/cases/anchor_propagation_lua547_eval.json`
+- seed anchor: `data/eval/anchors/lua547_seed_anchors.json`
+- 로컬 full trace 결과: `data/eval/results/anchor_propagation_lua547_summary.json`
+- Git 추적 요약: `data/eval/results/summaries/callgraph_eval_summary.json`
+- Git 추적 대표 결과: `data/eval/results/representative/anchor_propagation_lua547_compact.json`
+
+현재 결과는 9개 대표 cross-architecture case 기준 `accepted=7`, `deferred=2`, `conflict=0`이다. `luaL_checktype`은 `sort` caller anchor를 통해 후보군에는 복구되지만, 같은 caller neighborhood 안의 `lua_type`, `lua_settop`, `luaL_len` 등과 graph evidence가 같아 `deferred`로 분류된다. `luaU_undump`는 retrieval top1은 맞지만 anchor evidence가 없어 보수적으로 `deferred` 처리된다.
+
+이 결과는 Agent 정책상 중요하다. 단순히 top1이 맞는지만 보지 않고, 충분한 graph evidence와 score margin이 없으면 확정하지 않는 방향이 리버싱 보조 도구에 더 안전하다.
+
+Eval 결과 관리 정책은 full trace와 tracked summary를 분리한다. Root-level `data/eval/results/*.json`은 로컬 디버깅 artifact로 보고 `.gitignore` 처리한다. Git에는 `summaries/`의 작은 지표 요약과 `representative/`의 대표 compact 결과만 남긴다.
+
 ## 7. Conflict Resolver 구현
 
 같은 reference 함수에 여러 query 함수가 매핑되는 경우를 처리한다.

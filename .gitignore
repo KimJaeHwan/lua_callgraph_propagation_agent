@@ -35,8 +35,15 @@ data/eval/**
 !data/eval/cases/*.json
 !data/eval/fixtures/
 !data/eval/fixtures/*.json
+!data/eval/anchors/
+!data/eval/anchors/*.json
 !data/eval/results/
-!data/eval/results/*.json
+data/eval/results/*.json
+!data/eval/results/README.md
+!data/eval/results/summaries/
+!data/eval/results/summaries/*.json
+!data/eval/results/representative/
+!data/eval/results/representative/*.json
 
 data/tmp/**
 !data/tmp/
