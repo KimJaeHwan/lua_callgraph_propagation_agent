@@ -218,3 +218,29 @@ data/eval/fixtures/*.json                            # small fixture only
 ```
 
 대량 생성된 SQLite DB는 재생성 가능한 산출물이므로 기본적으로 Git에 올리지 않는다. 작은 fixture JSON은 스키마와 테스트 의도를 보여주기 위해 Git에 포함한다.
+
+## 9. 생성 명령
+
+바닐라 feature JSON에서 reference DB를 생성한다.
+
+```bash
+python3 scripts/01_build_reference_callgraph_db.py --replace
+```
+
+기본 입력:
+
+```text
+../lua_extract_feature_ghidra/outputs_vanilla
+```
+
+기본 출력:
+
+```text
+data/inputs/callgraphs/reference_callgraph.sqlite
+```
+
+대상 feature JSON만 확인하려면 다음 명령을 사용한다.
+
+```bash
+python3 scripts/01_build_reference_callgraph_db.py --list-only
+```

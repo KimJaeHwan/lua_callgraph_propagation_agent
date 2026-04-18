@@ -11,10 +11,12 @@ lua_callgraph_propagation_agent/
 ├── PROJECT_STRUCTURE.md
 ├── docs/
 │   ├── callgraph_propagation_agent_design.md
+│   ├── callgraph_store_design.md
 │   ├── development_plan.md
 │   └── input_schema.md
 ├── scripts/
-│   └── .gitkeep
+│   ├── .gitkeep
+│   └── 01_build_reference_callgraph_db.py
 ├── src/
 │   └── lua_callgraph_propagation_agent/
 │       └── __init__.py

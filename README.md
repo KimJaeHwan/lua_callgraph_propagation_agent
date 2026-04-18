@@ -120,6 +120,22 @@ Local LLM은 최종 판정자가 아니라 애매한 함수에 대한 analyst as
 - `data/tmp/`: 임시 변환 파일.
 - `tests/`: 단위 테스트 및 작은 fixture 기반 검증.
 
+## Reference Call Graph DB 생성
+
+바닐라 Lua feature JSON에서 SQLite edge-list 기반 reference call graph를 생성한다.
+
+```bash
+python3 scripts/01_build_reference_callgraph_db.py --replace
+```
+
+기본 입력은 `../lua_extract_feature_ghidra/outputs_vanilla`이고, 기본 출력은 `data/inputs/callgraphs/reference_callgraph.sqlite`다. 실제 DB 파일은 재생성 가능한 산출물이므로 Git에는 포함하지 않는다.
+
+대상 feature 파일만 확인하려면 다음처럼 실행한다.
+
+```bash
+python3 scripts/01_build_reference_callgraph_db.py --list-only
+```
+
 ## Git 관리 방침
 
 Git에 포함하는 항목:
