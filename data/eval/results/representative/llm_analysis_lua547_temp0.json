@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1",
+  "description": "Local LLM analyst output for deferred/conflict Lua mapping cases. These are advisory suggestions only.",
+  "input_json": "data/eval/results/representative/deferred_analysis_lua547.json",
+  "provider": "openai-compatible",
+  "model": "qwen/qwen3.6-35b-a3b",
+  "summary": {
+    "num_cases": 2,
+    "completed": 2,
+    "prompt_exported": 0,
+    "errors": 0
+  },
+  "results": [
+    {
+      "case_id": "arm_to_x86_luaL_checktype",
+      "provider": "openai-compatible",
+      "model": "qwen/qwen3.6-35b-a3b",
+      "status": "completed",
+      "raw_response": "\n\n{\n  \"classification\": \"remain_deferred\",\n  \"recommended_candidate\": null,\n  \"confidence\": 0.1,\n  \"reasoning_summary\": [\n    \"All top candidates share identical final scores (0.69) and identical caller anchor evidence.\",\n    \"No distinguishing structural or pcode features differentiate the tied candidates.\",\n    \"Query function name is a debug label and cannot be used for identity.\"\n  ],\n  \"risks\": [\n    \"Mapping to a function with similar API role (e.g., luaL_len or lua_type) due to lack of disambiguating anchors.\"\n  ]\n}",
+      "analysis": {
+        "classification": "remain_deferred",
+        "recommended_candidate": null,
+        "confidence": 0.1,
+        "reasoning_summary": [
+          "All top candidates share identical final scores (0.69) and identical caller anchor evidence.",
+          "No distinguishing structural or pcode features differentiate the tied candidates.",
+          "Query function name is a debug label and cannot be used for identity."
+        ],
+        "risks": [
+          "Mapping to a function with similar API role (e.g., luaL_len or lua_type) due to lack of disambiguating anchors."
+        ]
+      }
+    },
+    {
+      "case_id": "arm_to_x86_luaU_undump",
+      "provider": "openai-compatible",
+      "model": "qwen/qwen3.6-35b-a3b",
+      "status": "completed",
+      "raw_response": "\n\n{\n  \"classification\": \"remain_deferred\",\n  \"recommended_candidate\": null,\n  \"confidence\": 0.05,\n  \"reasoning_summary\": [\n    \"Zero caller/callee graph anchors prevent structural validation.\",\n    \"Retrieval score relies on name and string similarity, not cross-architecture topology.\",\n    \"Rules explicitly advise propagating anchors before accepting.\"\n  ],\n  \"risks\": [\n    \"False positive mapping due to reliance on debug labels and string similarity.\",\n    \"Incorrect mapping could break downstream loader or chunk parsing logic.\"\n  ]\n}",
+      "analysis": {
+        "classification": "remain_deferred",
+        "recommended_candidate": null,
+        "confidence": 0.05,
+        "reasoning_summary": [
+          "Zero caller/callee graph anchors prevent structural validation.",
+          "Retrieval score relies on name and string similarity, not cross-architecture topology.",
+          "Rules explicitly advise propagating anchors before accepting."
+        ],
+        "risks": [
+          "False positive mapping due to reliance on debug labels and string similarity.",
+          "Incorrect mapping could break downstream loader or chunk parsing logic."
+        ]
+      }
+    }
+  ]
+}

@@ -244,6 +244,29 @@ Feature summary를 붙인 뒤 `luaL_checktype`은 `small_api_wrapper_like_functi
 
 이 단계의 목적은 LLM을 바로 붙이는 것이 아니다. 먼저 deterministic rule이 “왜 확정하지 않았는지”를 구조화하고, LLM이 필요한 경우에만 작은 분석 payload를 넘기는 것이다.
 
+Local LLM analyst adapter:
+
+- `scripts/06_run_local_llm_analyst.py`
+- 입력: `data/eval/results/representative/deferred_analysis_lua547.json`
+- dry-run 출력: `data/eval/results/representative/llm_analysis_lua547_dryrun.json`
+
+`06` 스크립트는 deterministic pipeline과 분리된 optional adapter다. `--dry-run`은 prompt만 export하고, 실제 모델 호출은 하지 않는다. 실제 호출은 Ollama 또는 OpenAI-compatible local endpoint를 사용한다.
+
+예시:
+
+```bash
+python3 scripts/06_run_local_llm_analyst.py \
+  --input-json data/eval/results/representative/deferred_analysis_lua547.json \
+  --output-json data/eval/results/representative/llm_analysis_lua547_dryrun.json \
+  --dry-run
+
+python3 scripts/06_run_local_llm_analyst.py \
+  --provider ollama \
+  --model qwen2.5-coder:7b \
+  --input-json data/eval/results/representative/deferred_analysis_lua547.json \
+  --output-json data/eval/results/representative/llm_analysis_lua547.json
+```
+
 예상 출력:
 
 ```json
