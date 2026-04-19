@@ -223,6 +223,27 @@ LLM 호출 대상:
 
 LLM 출력은 final mapping을 바로 덮어쓰지 않고 evidence로 저장한다.
 
+현재는 LLM 호출 전 단계로 deferred analysis builder를 먼저 구현한다.
+
+현재 MVP 구현:
+
+- `scripts/05_build_deferred_analysis.py`
+- 입력: `data/eval/results/anchor_propagation_lua547_summary.json`
+- 출력: `data/eval/results/representative/deferred_analysis_lua547.json`
+
+이 스크립트는 `deferred`와 `conflict` case를 사람이 읽을 수 있는 analyst task로 변환한다. 각 case에는 deferred 이유, top candidate score, anchor count, tied candidate 목록, recommended action, 그리고 이후 Local LLM에 그대로 넘길 수 있는 `llm_payload`가 포함된다.
+
+`llm_payload` v0.2는 query feature summary를 포함한다. 현재 포함되는 feature는 basic block count, pcode instruction count, top pcode opcodes, strings, caller/callee visibility count, struct offsets, compare constants, feature tags다. Eval 데이터에는 query 함수명이 남아 있으므로 payload에 label leakage warning을 포함하고, LLM이 이름이 아니라 feature/retrieval/graph evidence를 기준으로 판단하도록 한다.
+
+현재 대표 결과:
+
+- `luaL_checktype`: `ambiguous_candidate_tie`. `sort` caller anchor 하나만으로는 `lua_type`, `lua_settop`, `luaL_len`, `luaL_checktype` 등을 구분하지 못한다.
+- `luaU_undump`: `needs_more_graph_anchors`. retrieval top1은 맞지만 caller/callee anchor evidence가 없어 자동 확정하지 않는다.
+
+Feature summary를 붙인 뒤 `luaL_checktype`은 `small_api_wrapper_like_function`, `no_strings`, `few_visible_callers`로 요약된다. `luaU_undump`는 `string_rich`, `binary_chunk_or_loader_related_strings`, `large_complex_function`, `call_heavy`로 요약된다. 이 차이는 Local LLM이 deferred case를 설명하거나 추가 anchor 필요성을 판단할 때 유효한 입력 근거가 된다.
+
+이 단계의 목적은 LLM을 바로 붙이는 것이 아니다. 먼저 deterministic rule이 “왜 확정하지 않았는지”를 구조화하고, LLM이 필요한 경우에만 작은 분석 payload를 넘기는 것이다.
+
 예상 출력:
 
 ```json

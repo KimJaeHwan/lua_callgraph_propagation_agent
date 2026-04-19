@@ -1,0 +1,801 @@
+{
+  "schema_version": "0.1",
+  "description": "Compact deferred/conflict analysis generated from anchor propagation output. This is suitable for manual review and later Local LLM analyst input.",
+  "source_file": "data/eval/results/anchor_propagation_lua547_summary.json",
+  "embedding_root": "../lua_function_embedding",
+  "source_suite_name": "anchor_propagation_lua547_eval",
+  "summary": {
+    "deferred_count": 2,
+    "conflict_count": 0,
+    "category_counts": {
+      "ambiguous_candidate_tie": 1,
+      "needs_more_graph_anchors": 1
+    },
+    "feature_summary_attached": 2
+  },
+  "deferred_cases": [
+    {
+      "case_id": "arm_to_x86_luaL_checktype",
+      "query_file": "data/eval/tmp/masked_arm_query.json",
+      "query_func": "luaL_checktype",
+      "architecture": "aarch64",
+      "expected_function": "luaL_checktype",
+      "current_top_prediction": "lua_type",
+      "expected_final_rank": 4,
+      "review_category": "ambiguous_candidate_tie",
+      "status_reasons": [
+        {
+          "reason": "low_score_margin",
+          "description": "Top candidates are too close to safely accept one mapping."
+        },
+        {
+          "reason": "multiple_candidates_same_final_score",
+          "description": "Multiple candidates share the same final score."
+        }
+      ],
+      "recommended_action": "Compare the tied candidates with local function features or send this record to the Local LLM analyst layer for semantic disambiguation.",
+      "score_margin_top1_top2": 0.0,
+      "top_tied_candidates": [
+        "lua_type",
+        "lua_settop",
+        "luaL_len",
+        "luaL_checktype",
+        "luaL_argerror",
+        "checktab",
+        "auxsort"
+      ],
+      "anchor_counts": {
+        "callee": 0,
+        "caller": 1
+      },
+      "anchors": {
+        "callees": [],
+        "callers": [
+          {
+            "query_neighbor_name": "sort",
+            "reference_function_name": "sort",
+            "source": "visible_reference_name_anchor"
+          }
+        ]
+      },
+      "candidate_counts": {
+        "total": 11,
+        "retrieval": 3,
+        "expanded": 8
+      },
+      "query_feature_summary": {
+        "function_name_debug_label": "luaL_checktype",
+        "architecture": "arm64",
+        "lua_version": "Lua_547",
+        "basic_block_count": 3,
+        "pcode_instruction_count": 71,
+        "top_pcode_opcodes": [
+          {
+            "name": "COPY",
+            "count": 24
+          },
+          {
+            "name": "INT_ADD",
+            "count": 17
+          },
+          {
+            "name": "LOAD",
+            "count": 10
+          },
+          {
+            "name": "STORE",
+            "count": 5
+          },
+          {
+            "name": "INT_ZEXT",
+            "count": 4
+          },
+          {
+            "name": "CALL",
+            "count": 2
+          },
+          {
+            "name": "INT_LESSEQUAL",
+            "count": 1
+          },
+          {
+            "name": "INT_SBORROW",
+            "count": 1
+          },
+          {
+            "name": "INT_SUB",
+            "count": 1
+          },
+          {
+            "name": "INT_SLESS",
+            "count": 1
+          }
+        ],
+        "strings": [],
+        "string_count": 0,
+        "callees": {
+          "total_count": 2,
+          "visible_count": 0,
+          "anonymous_count": 2,
+          "visible_names": []
+        },
+        "callers": {
+          "total_count": 20,
+          "visible_count": 1,
+          "anonymous_count": 19,
+          "visible_names": [
+            "sort"
+          ]
+        },
+        "struct_offsets": [],
+        "struct_offset_count": 0,
+        "compare_constants": {
+          "offset_count": 0,
+          "sample": []
+        },
+        "feature_tags": [
+          "small_api_wrapper_like_function",
+          "no_strings",
+          "few_visible_callers"
+        ]
+      },
+      "top_candidates": [
+        {
+          "rank": 1,
+          "function_name": "lua_type",
+          "role_hint": {
+            "role": "Lua public C API",
+            "rationale": "lua_ prefix"
+          },
+          "source": "callgraph_expansion",
+          "retrieval_prior": 0.65,
+          "graph_score": 0.04,
+          "final_score": 0.69,
+          "primary_matches": 1,
+          "auxiliary_matches": 0,
+          "missing_anchor_edges": 0,
+          "evidence": [
+            "primary_caller_anchor_match:sort->lua_type"
+          ]
+        },
+        {
+          "rank": 2,
+          "function_name": "lua_settop",
+          "role_hint": {
+            "role": "Lua public C API",
+            "rationale": "lua_ prefix"
+          },
+          "source": "callgraph_expansion",
+          "retrieval_prior": 0.65,
+          "graph_score": 0.04,
+          "final_score": 0.69,
+          "primary_matches": 1,
+          "auxiliary_matches": 0,
+          "missing_anchor_edges": 0,
+          "evidence": [
+            "primary_caller_anchor_match:sort->lua_settop"
+          ]
+        },
+        {
+          "rank": 3,
+          "function_name": "luaL_len",
+          "role_hint": {
+            "role": "Lua auxiliary library API/helper",
+            "rationale": "luaL_ prefix"
+          },
+          "source": "callgraph_expansion",
+          "retrieval_prior": 0.65,
+          "graph_score": 0.04,
+          "final_score": 0.69,
+          "primary_matches": 1,
+          "auxiliary_matches": 0,
+          "missing_anchor_edges": 0,
+          "evidence": [
+            "primary_caller_anchor_match:sort->luaL_len"
+          ]
+        },
+        {
+          "rank": 4,
+          "function_name": "luaL_checktype",
+          "role_hint": {
+            "role": "Lua auxiliary library API/helper",
+            "rationale": "luaL_ prefix"
+          },
+          "source": "callgraph_expansion",
+          "retrieval_prior": 0.65,
+          "graph_score": 0.04,
+          "final_score": 0.69,
+          "primary_matches": 1,
+          "auxiliary_matches": 0,
+          "missing_anchor_edges": 0,
+          "evidence": [
+            "primary_caller_anchor_match:sort->luaL_checktype"
+          ]
+        },
+        {
+          "rank": 5,
+          "function_name": "luaL_argerror",
+          "role_hint": {
+            "role": "Lua auxiliary library API/helper",
+            "rationale": "luaL_ prefix"
+          },
+          "source": "callgraph_expansion",
+          "retrieval_prior": 0.65,
+          "graph_score": 0.04,
+          "final_score": 0.69,
+          "primary_matches": 1,
+          "auxiliary_matches": 0,
+          "missing_anchor_edges": 0,
+          "evidence": [
+            "primary_caller_anchor_match:sort->luaL_argerror"
+          ]
+        }
+      ],
+      "llm_payload": {
+        "schema_version": "0.2",
+        "task": "Review one deferred Lua function mapping case. Decide whether one candidate has enough evidence to recommend, or whether the case should remain deferred for more anchors/manual review.",
+        "label_leakage_warning": "Function names in query_func and expected_function may be debug/eval labels. Do not use them as identity evidence. Use feature, retrieval, and graph evidence.",
+        "query_function": "luaL_checktype",
+        "query_feature_summary": {
+          "function_name_debug_label": "luaL_checktype",
+          "architecture": "arm64",
+          "lua_version": "Lua_547",
+          "basic_block_count": 3,
+          "pcode_instruction_count": 71,
+          "top_pcode_opcodes": [
+            {
+              "name": "COPY",
+              "count": 24
+            },
+            {
+              "name": "INT_ADD",
+              "count": 17
+            },
+            {
+              "name": "LOAD",
+              "count": 10
+            },
+            {
+              "name": "STORE",
+              "count": 5
+            },
+            {
+              "name": "INT_ZEXT",
+              "count": 4
+            },
+            {
+              "name": "CALL",
+              "count": 2
+            },
+            {
+              "name": "INT_LESSEQUAL",
+              "count": 1
+            },
+            {
+              "name": "INT_SBORROW",
+              "count": 1
+            },
+            {
+              "name": "INT_SUB",
+              "count": 1
+            },
+            {
+              "name": "INT_SLESS",
+              "count": 1
+            }
+          ],
+          "strings": [],
+          "string_count": 0,
+          "callees": {
+            "total_count": 2,
+            "visible_count": 0,
+            "anonymous_count": 2,
+            "visible_names": []
+          },
+          "callers": {
+            "total_count": 20,
+            "visible_count": 1,
+            "anonymous_count": 19,
+            "visible_names": [
+              "sort"
+            ]
+          },
+          "struct_offsets": [],
+          "struct_offset_count": 0,
+          "compare_constants": {
+            "offset_count": 0,
+            "sample": []
+          },
+          "feature_tags": [
+            "small_api_wrapper_like_function",
+            "no_strings",
+            "few_visible_callers"
+          ]
+        },
+        "deferred_reasons": [
+          "low_score_margin",
+          "multiple_candidates_same_final_score"
+        ],
+        "candidate_summaries": [
+          {
+            "rank": 1,
+            "function_name": "lua_type",
+            "role_hint": {
+              "role": "Lua public C API",
+              "rationale": "lua_ prefix"
+            },
+            "source": "callgraph_expansion",
+            "retrieval_prior": 0.65,
+            "graph_score": 0.04,
+            "final_score": 0.69,
+            "primary_matches": 1,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "evidence": [
+              "primary_caller_anchor_match:sort->lua_type"
+            ]
+          },
+          {
+            "rank": 2,
+            "function_name": "lua_settop",
+            "role_hint": {
+              "role": "Lua public C API",
+              "rationale": "lua_ prefix"
+            },
+            "source": "callgraph_expansion",
+            "retrieval_prior": 0.65,
+            "graph_score": 0.04,
+            "final_score": 0.69,
+            "primary_matches": 1,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "evidence": [
+              "primary_caller_anchor_match:sort->lua_settop"
+            ]
+          },
+          {
+            "rank": 3,
+            "function_name": "luaL_len",
+            "role_hint": {
+              "role": "Lua auxiliary library API/helper",
+              "rationale": "luaL_ prefix"
+            },
+            "source": "callgraph_expansion",
+            "retrieval_prior": 0.65,
+            "graph_score": 0.04,
+            "final_score": 0.69,
+            "primary_matches": 1,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "evidence": [
+              "primary_caller_anchor_match:sort->luaL_len"
+            ]
+          },
+          {
+            "rank": 4,
+            "function_name": "luaL_checktype",
+            "role_hint": {
+              "role": "Lua auxiliary library API/helper",
+              "rationale": "luaL_ prefix"
+            },
+            "source": "callgraph_expansion",
+            "retrieval_prior": 0.65,
+            "graph_score": 0.04,
+            "final_score": 0.69,
+            "primary_matches": 1,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "evidence": [
+              "primary_caller_anchor_match:sort->luaL_checktype"
+            ]
+          },
+          {
+            "rank": 5,
+            "function_name": "luaL_argerror",
+            "role_hint": {
+              "role": "Lua auxiliary library API/helper",
+              "rationale": "luaL_ prefix"
+            },
+            "source": "callgraph_expansion",
+            "retrieval_prior": 0.65,
+            "graph_score": 0.04,
+            "final_score": 0.69,
+            "primary_matches": 1,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "evidence": [
+              "primary_caller_anchor_match:sort->luaL_argerror"
+            ]
+          }
+        ],
+        "graph_anchor_summary": {
+          "callee_anchor_count": 0,
+          "caller_anchor_count": 1,
+          "top_tied_candidates": [
+            "lua_type",
+            "lua_settop",
+            "luaL_len",
+            "luaL_checktype",
+            "luaL_argerror",
+            "checktab",
+            "auxsort"
+          ]
+        },
+        "answer_format": {
+          "classification": "prefer_candidate | remain_deferred | need_more_anchors | possible_custom",
+          "recommended_candidate": "string or null",
+          "confidence": "0.0-1.0",
+          "reasoning_summary": [
+            "short evidence bullets"
+          ],
+          "risks": [
+            "short risk bullets"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "arm_to_x86_luaU_undump",
+      "query_file": "data/eval/tmp/masked_arm_query.json",
+      "query_func": "luaU_undump",
+      "architecture": "aarch64",
+      "expected_function": "luaU_undump",
+      "current_top_prediction": "luaU_undump",
+      "expected_final_rank": 1,
+      "review_category": "needs_more_graph_anchors",
+      "status_reasons": [
+        {
+          "reason": "no_anchor_evidence",
+          "description": "No accepted caller/callee anchor supports this mapping."
+        },
+        {
+          "reason": "insufficient_primary_graph_matches",
+          "description": "The best candidate lacks primary O0 graph evidence."
+        }
+      ],
+      "recommended_action": "Do not accept automatically. First propagate additional high-confidence caller/callee anchors, then re-run graph scoring.",
+      "score_margin_top1_top2": null,
+      "top_tied_candidates": [
+        "luaU_undump"
+      ],
+      "anchor_counts": {
+        "callee": 0,
+        "caller": 0
+      },
+      "anchors": {
+        "callees": [],
+        "callers": []
+      },
+      "candidate_counts": {
+        "total": 1,
+        "retrieval": 1,
+        "expanded": 0
+      },
+      "query_feature_summary": {
+        "function_name_debug_label": "luaU_undump",
+        "architecture": "arm64",
+        "lua_version": "Lua_547",
+        "basic_block_count": 58,
+        "pcode_instruction_count": 835,
+        "top_pcode_opcodes": [
+          {
+            "name": "COPY",
+            "count": 266
+          },
+          {
+            "name": "INT_ADD",
+            "count": 118
+          },
+          {
+            "name": "INT_EQUAL",
+            "count": 66
+          },
+          {
+            "name": "INT_SLESS",
+            "count": 54
+          },
+          {
+            "name": "LOAD",
+            "count": 48
+          },
+          {
+            "name": "INT_CARRY",
+            "count": 40
+          },
+          {
+            "name": "INT_SCARRY",
+            "count": 40
+          },
+          {
+            "name": "CBRANCH",
+            "count": 34
+          },
+          {
+            "name": "CALL",
+            "count": 30
+          },
+          {
+            "name": "STORE",
+            "count": 23
+          }
+        ],
+        "strings": [
+          "version mismatch",
+          "instruction",
+          "truncated chunk",
+          "lua_number",
+          "lua_integer",
+          "corrupted chunk",
+          "integer format mismatch",
+          "binary string",
+          "not a binary chunk",
+          "float format mismatch"
+        ],
+        "string_count": 10,
+        "callees": {
+          "total_count": 11,
+          "visible_count": 1,
+          "anonymous_count": 10,
+          "visible_names": [
+            "__stack_chk_fail"
+          ]
+        },
+        "callers": {
+          "total_count": 1,
+          "visible_count": 0,
+          "anonymous_count": 1,
+          "visible_names": []
+        },
+        "struct_offsets": [
+          457,
+          9,
+          16,
+          433,
+          442,
+          93,
+          191
+        ],
+        "struct_offset_count": 7,
+        "compare_constants": {
+          "offset_count": 2,
+          "sample": [
+            {
+              "offset": "433",
+              "value": 64
+            },
+            {
+              "offset": "433",
+              "value": 0
+            },
+            {
+              "offset": "433",
+              "value": 4
+            },
+            {
+              "offset": "433",
+              "value": 8
+            },
+            {
+              "offset": "433",
+              "value": 84
+            },
+            {
+              "offset": "433",
+              "value": 27
+            },
+            {
+              "offset": "433",
+              "value": 61
+            },
+            {
+              "offset": "93",
+              "value": 0
+            }
+          ]
+        },
+        "feature_tags": [
+          "string_rich",
+          "binary_chunk_or_loader_related_strings",
+          "large_complex_function",
+          "call_heavy",
+          "few_visible_callers"
+        ]
+      },
+      "top_candidates": [
+        {
+          "rank": 1,
+          "function_name": "luaU_undump",
+          "role_hint": {
+            "role": "Lua binary chunk undump/load support",
+            "rationale": "luaU_ prefix"
+          },
+          "source": "retrieval",
+          "retrieval_prior": 0.765263,
+          "graph_score": 0.0,
+          "final_score": 0.765263,
+          "primary_matches": 0,
+          "auxiliary_matches": 0,
+          "missing_anchor_edges": 0,
+          "evidence": []
+        }
+      ],
+      "llm_payload": {
+        "schema_version": "0.2",
+        "task": "Review one deferred Lua function mapping case. Decide whether one candidate has enough evidence to recommend, or whether the case should remain deferred for more anchors/manual review.",
+        "label_leakage_warning": "Function names in query_func and expected_function may be debug/eval labels. Do not use them as identity evidence. Use feature, retrieval, and graph evidence.",
+        "query_function": "luaU_undump",
+        "query_feature_summary": {
+          "function_name_debug_label": "luaU_undump",
+          "architecture": "arm64",
+          "lua_version": "Lua_547",
+          "basic_block_count": 58,
+          "pcode_instruction_count": 835,
+          "top_pcode_opcodes": [
+            {
+              "name": "COPY",
+              "count": 266
+            },
+            {
+              "name": "INT_ADD",
+              "count": 118
+            },
+            {
+              "name": "INT_EQUAL",
+              "count": 66
+            },
+            {
+              "name": "INT_SLESS",
+              "count": 54
+            },
+            {
+              "name": "LOAD",
+              "count": 48
+            },
+            {
+              "name": "INT_CARRY",
+              "count": 40
+            },
+            {
+              "name": "INT_SCARRY",
+              "count": 40
+            },
+            {
+              "name": "CBRANCH",
+              "count": 34
+            },
+            {
+              "name": "CALL",
+              "count": 30
+            },
+            {
+              "name": "STORE",
+              "count": 23
+            }
+          ],
+          "strings": [
+            "version mismatch",
+            "instruction",
+            "truncated chunk",
+            "lua_number",
+            "lua_integer",
+            "corrupted chunk",
+            "integer format mismatch",
+            "binary string",
+            "not a binary chunk",
+            "float format mismatch"
+          ],
+          "string_count": 10,
+          "callees": {
+            "total_count": 11,
+            "visible_count": 1,
+            "anonymous_count": 10,
+            "visible_names": [
+              "__stack_chk_fail"
+            ]
+          },
+          "callers": {
+            "total_count": 1,
+            "visible_count": 0,
+            "anonymous_count": 1,
+            "visible_names": []
+          },
+          "struct_offsets": [
+            457,
+            9,
+            16,
+            433,
+            442,
+            93,
+            191
+          ],
+          "struct_offset_count": 7,
+          "compare_constants": {
+            "offset_count": 2,
+            "sample": [
+              {
+                "offset": "433",
+                "value": 64
+              },
+              {
+                "offset": "433",
+                "value": 0
+              },
+              {
+                "offset": "433",
+                "value": 4
+              },
+              {
+                "offset": "433",
+                "value": 8
+              },
+              {
+                "offset": "433",
+                "value": 84
+              },
+              {
+                "offset": "433",
+                "value": 27
+              },
+              {
+                "offset": "433",
+                "value": 61
+              },
+              {
+                "offset": "93",
+                "value": 0
+              }
+            ]
+          },
+          "feature_tags": [
+            "string_rich",
+            "binary_chunk_or_loader_related_strings",
+            "large_complex_function",
+            "call_heavy",
+            "few_visible_callers"
+          ]
+        },
+        "deferred_reasons": [
+          "no_anchor_evidence",
+          "insufficient_primary_graph_matches"
+        ],
+        "candidate_summaries": [
+          {
+            "rank": 1,
+            "function_name": "luaU_undump",
+            "role_hint": {
+              "role": "Lua binary chunk undump/load support",
+              "rationale": "luaU_ prefix"
+            },
+            "source": "retrieval",
+            "retrieval_prior": 0.765263,
+            "graph_score": 0.0,
+            "final_score": 0.765263,
+            "primary_matches": 0,
+            "auxiliary_matches": 0,
+            "missing_anchor_edges": 0,
+            "evidence": []
+          }
+        ],
+        "graph_anchor_summary": {
+          "callee_anchor_count": 0,
+          "caller_anchor_count": 0,
+          "top_tied_candidates": [
+            "luaU_undump"
+          ]
+        },
+        "answer_format": {
+          "classification": "prefer_candidate | remain_deferred | need_more_anchors | possible_custom",
+          "recommended_candidate": "string or null",
+          "confidence": "0.0-1.0",
+          "reasoning_summary": [
+            "short evidence bullets"
+          ],
+          "risks": [
+            "short risk bullets"
+          ]
+        }
+      }
+    }
+  ],
+  "conflict_cases": []
+}
