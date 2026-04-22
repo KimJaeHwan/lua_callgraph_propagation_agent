@@ -24,6 +24,18 @@ data/inputs/callgraphs/**
 !data/inputs/callgraphs/
 !data/inputs/callgraphs/.gitkeep
 
+data/inputs/binaries/**
+!data/inputs/binaries/
+!data/inputs/binaries/.gitkeep
+
+data/inputs/query_features/**
+!data/inputs/query_features/
+!data/inputs/query_features/*.json
+
+data/inputs/reference_features/**
+!data/inputs/reference_features/
+!data/inputs/reference_features/.gitkeep
+
 data/outputs/mappings/**
 !data/outputs/mappings/
 !data/outputs/mappings/.gitkeep
@@ -49,6 +61,18 @@ data/tmp/**
 !data/tmp/
 !data/tmp/.gitkeep
 
+data/runtime/**
+!data/runtime/
+!data/runtime/.gitkeep
+!data/runtime/input/
+!data/runtime/input/.gitkeep
+!data/runtime/input/*
+
+# Do not commit the copied full retrieval index or generated runtime outputs.
+data/inputs/retrieval_indexes/**
+!data/inputs/retrieval_indexes/
+!data/inputs/retrieval_indexes/.gitkeep
+
 # Local databases / large artifacts
 *.sqlite3
 *.sqlite
@@ -62,3 +86,5 @@ data/tmp/**
 *.log
 *.tmp
 *.temp
+
+# Keep committed runtime assets

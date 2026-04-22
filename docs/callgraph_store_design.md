@@ -230,7 +230,7 @@ python3 scripts/01_build_reference_callgraph_db.py --replace
 기본 입력:
 
 ```text
-../lua_extract_feature_ghidra/outputs_vanilla
+data/inputs/reference_features
 ```
 
 기본 출력:
@@ -245,15 +245,9 @@ data/inputs/callgraphs/reference_callgraph.sqlite
 python3 scripts/01_build_reference_callgraph_db.py --list-only
 ```
 
-## 10. Scoring MVP 실행
+## 10. Scoring MVP 메모
 
-생성된 `reference_callgraph.sqlite`를 사용해 retrieval 후보를 call graph evidence로 재랭킹한다.
-
-```bash
-python3 scripts/02_score_with_callgraph.py \
-  --expected query::00119970=luaV_execute \
-  --output-json data/eval/fixtures/result_callgraph_minimal.json
-```
+초기 연구 단계에서는 생성된 `reference_callgraph.sqlite`를 사용해 retrieval 후보를 call graph evidence로 재랭킹하는 실험용 스크립트를 별도로 운용했다.
 
 Minimal fixture의 의도는 retrieval 점수만으로는 `llex`가 근소하게 앞서지만, anchor callee evidence로 `luaV_execute`를 승격시키는 것이다.
 
@@ -269,14 +263,9 @@ graph evidence:
   luaV_execute -> luaT_trybinTM
 ```
 
-## 11. 실제 Retrieval 결과 평가
+## 11. 실제 Retrieval 결과 평가 메모
 
-`lua_function_embedding`의 `result_dir_index.json`를 입력으로 받아 실제 8개 평가 케이스에 callgraph score correction을 적용한다.
-
-```bash
-python3 scripts/03_eval_hybrid_callgraph_cases.py \
-  --suite data/eval/cases/hybrid_callgraph_lua547_eval.json
-```
+초기 평가 단계에서는 retrieval 결과 JSON을 입력으로 받아 실제 케이스에 callgraph score correction을 적용하는 별도 평가 스크립트를 운용했다.
 
 현재 평가는 query feature에 남아 있는 caller/callee 이름 중 vanilla reference DB에 존재하는 이름을 temporary anchor로 사용한다. 이 정책은 통합 파이프라인 검증용이며, 완전 블라인드 평가는 아니다.
 

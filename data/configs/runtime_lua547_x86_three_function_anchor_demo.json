@@ -1,0 +1,75 @@
+{
+  "pipeline_name": "lua547_x86_three_function_anchor_demo",
+  "description": "Three-function propagation demo with caller/callee context for MCP validation.",
+  "paths": {
+    "session_name": "lua547_x86_three_function_anchor_demo",
+    "target_binary": "",
+    "target_lua_version": "Lua_547",
+    "target_architecture": "x86_64",
+    "target_opt_level": "O0",
+    "target_strip_mode": "nostrip",
+    "extractor_script": "src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py",
+    "extractor_work_root": "data/runtime/extractor_workspace",
+    "query_feature_output_root": "data/runtime/query_features",
+    "extract_manifest_json": "",
+    "query_feature_json": "data/inputs/query_features/lua547_x86_three_function_anchor_demo.json",
+    "retrieval_script": "src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py",
+    "retrieval_index": "data/inputs/retrieval_indexes/lua547_x86_runtime",
+    "retrieval_output_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/retrieval_result.json",
+    "seed_anchor_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/seed_anchors.json",
+    "runtime_suite_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/runtime_propagation_suite.json",
+    "reference_feature_root": "data/inputs/reference_features",
+    "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+    "embedding_project_root": ".",
+    "propagation_suite": "",
+    "propagation_output_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/propagation_result.json",
+    "deferred_output_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/deferred_analysis.json",
+    "llm_output_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/llm_analysis_temp0.json",
+    "final_report_json": "data/runtime/results/lua547_x86_three_function_anchor_demo/final_mapping_report.json"
+  },
+  "steps": {
+    "build_reference_db": {
+      "enabled": false,
+      "replace": false
+    },
+    "extract_query_features": {
+      "enabled": false
+    },
+    "bulk_retrieval": {
+      "enabled": true,
+      "candidate_pool": 100,
+      "topk": 20,
+      "scoring_mode": "bonus_v2",
+      "mode": "runtime_query"
+    },
+    "select_seed_anchors": {
+      "enabled": true,
+      "min_top1_score": 0.92,
+      "min_margin": 0.05
+    },
+    "build_runtime_suite": {
+      "enabled": true
+    },
+    "propagation": {
+      "enabled": true
+    },
+    "deferred_analysis": {
+      "enabled": true,
+      "top_candidates": 5
+    },
+    "llm_analyst": {
+      "enabled": false,
+      "provider": "openai-compatible",
+      "base_url": "http://localhost:1234/v1",
+      "model": "qwen/qwen3.6-35b-a3b",
+      "temperature": 0,
+      "timeout": 180,
+      "response_format_json": false,
+      "max_cases": null
+    },
+    "final_report": {
+      "enabled": true
+    }
+  },
+  "external_steps": []
+}

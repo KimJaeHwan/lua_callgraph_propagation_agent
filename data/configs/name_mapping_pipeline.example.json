@@ -1,0 +1,75 @@
+{
+  "pipeline_name": "lua_name_mapping_pipeline",
+  "description": "Single-entry runtime config that centralizes extraction, retrieval, propagation, deferred analysis, optional MCP serving, and optional local LLM review inside lua_callgraph_propagation_agent with an in-repo full retrieval index copy.",
+  "paths": {
+    "session_name": "example_session",
+    "target_binary": "data/runtime/input/example_target.so",
+    "target_lua_version": "Lua_547",
+    "target_architecture": "x86_64",
+    "target_opt_level": "O2",
+    "target_strip_mode": "nostrip",
+    "extractor_script": "src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py",
+    "extractor_work_root": "data/runtime/extractor_workspace",
+    "query_feature_output_root": "data/runtime/query_features",
+    "extract_manifest_json": "data/runtime/query_features/example_session/extract_manifest.json",
+    "query_feature_json": "",
+    "retrieval_script": "src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py",
+    "retrieval_index": "data/inputs/retrieval_indexes/lua547_x86_runtime",
+    "retrieval_output_json": "data/runtime/results/example_session/retrieval_result.json",
+    "seed_anchor_json": "data/runtime/results/example_session/seed_anchors.json",
+    "runtime_suite_json": "data/runtime/results/example_session/runtime_propagation_suite.json",
+    "reference_feature_root": "data/inputs/reference_features",
+    "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+    "embedding_project_root": ".",
+    "propagation_suite": "",
+    "propagation_output_json": "data/runtime/results/example_session/propagation_result.json",
+    "deferred_output_json": "data/runtime/results/example_session/deferred_analysis.json",
+    "llm_output_json": "data/runtime/results/example_session/llm_analysis_temp0.json",
+    "final_report_json": "data/runtime/results/example_session/final_mapping_report.json"
+  },
+  "steps": {
+    "extract_query_features": {
+      "enabled": true
+    },
+    "bulk_retrieval": {
+      "enabled": true,
+      "candidate_pool": 200,
+      "topk": 50,
+      "scoring_mode": "bonus_v2",
+      "mode": "runtime_query"
+    },
+    "select_seed_anchors": {
+      "enabled": true,
+      "min_top1_score": 0.92,
+      "min_margin": 0.05
+    },
+    "build_runtime_suite": {
+      "enabled": true
+    },
+    "build_reference_db": {
+      "enabled": false,
+      "replace": false
+    },
+    "propagation": {
+      "enabled": true
+    },
+    "deferred_analysis": {
+      "enabled": true,
+      "top_candidates": 5
+    },
+    "llm_analyst": {
+      "enabled": false,
+      "provider": "openai-compatible",
+      "base_url": "http://localhost:1234/v1",
+      "model": "qwen/qwen3.6-35b-a3b",
+      "temperature": 0,
+      "timeout": 180,
+      "response_format_json": false,
+      "max_cases": null
+    },
+    "final_report": {
+      "enabled": true
+    }
+  },
+  "external_steps": []
+}

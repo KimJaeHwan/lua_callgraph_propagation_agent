@@ -1,0 +1,23 @@
+[project]
+name = "lua-callgraph-propagation-agent"
+version = "0.2.0"
+description = "FastMCP-powered Lua function name mapping runtime with retrieval, callgraph propagation, and optional local LLM review."
+requires-python = ">=3.11"
+dependencies = [
+  "fastmcp>=3.2.4",
+  "numpy",
+  "scikit-learn",
+  "sentence-transformers",
+  "tqdm",
+  "pyghidra",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,276 +1,139 @@
 # Lua Callgraph Propagation Agent
 
-`lua_callgraph_propagation_agent`는 `lua_function_embedding`의 retrieval top-k 결과를 입력으로 받아, call graph 문맥을 이용해 함수 이름/역할 매핑을 전파하고 역검증하는 Agent 개발 프로젝트입니다.
+`lua_callgraph_propagation_agent`는 Lua 함수 name mapping을 실제로 수행하는 단일 레포 런타임이다.  
+이 레포는 다음 단계를 한 곳에서 연결한다.
 
-이 프로젝트는 단일 함수 feature만으로 애매한 후보를 결정하려는 단계가 아니라, caller/callee 관계를 이용해 retrieval 후보를 재랭킹하고 high-confidence mapping을 주변 함수로 propagation/ref-backpropagation하는 단계를 담당합니다.
+- query binary 또는 pre-extracted feature 입력
+- hybrid retrieval top-k 생성
+- callgraph 기반 seed anchor 선택
+- propagation / conflict / deferred 분류
+- deferred 분석 payload 생성
+- optional local LLM analyst 연결
+- FastMCP 서버로 tool interface 제공
 
-이 프로젝트에서 Agent는 LLM이 단독으로 취약점을 판정하는 시스템이 아니다. Retrieval 후보, call graph evidence, local LLM 분석 요약을 함께 사용해 분석자가 봐야 할 함수 후보를 줄이고, Lua core 함수와 custom application/binding logic의 경계를 더 빠르게 파악하기 위한 분석 보조 루프다.
+연구 단계에서 쓰였던 sibling repository는 여전히 데이터 생성 이력으로 남아 있지만, 실제 운용 경로는 이 레포 안에 복사된 runtime asset을 기준으로 정리한다.
 
-## 관련 서브프로젝트
+## 현재 런타임 구성
 
-이 프로젝트는 Lua Mapper 전체 흐름의 마지막 decision layer에 가깝습니다. 앞 단계의 서브프로젝트들은 각각 데이터를 만들고, feature를 추출하고, retrieval 후보를 생성하는 역할을 담당합니다.
+- vendored extractor: [src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py)
+- vendored retrieval engine: [src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py)
+- pipeline entrypoint: [scripts/10_run_name_mapping_pipeline.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/10_run_name_mapping_pipeline.py)
+- FastMCP server: [scripts/20_run_mcp_server.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/20_run_mcp_server.py)
+- runtime asset bootstrap: [scripts/21_prepare_runtime_assets.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/21_prepare_runtime_assets.py)
 
-| Repository | 역할 |
-| --- | --- |
-| [`lua_custom_engine_generator`](https://github.com/KimJaeHwan/lua_custom_engine_generator) | 커스텀 Lua 엔진/바이너리 생성 단계. 다양한 Lua 버전, 아키텍처, 최적화 옵션 조합을 만들어 후속 분석 입력을 준비한다. |
-| [`lua_extract_feature_ghidra`](https://github.com/KimJaeHwan/lua_extract_feature_ghidra) | Ghidra/PyGhidra 기반 feature extraction 단계. 바이너리 함수별 opcode, call, struct offset, compare, string 등 정적 feature를 추출한다. |
-| [`lua_function_embedding`](https://github.com/KimJaeHwan/lua_function_embedding) | 함수 retrieval baseline 단계. 추출된 feature를 symbolic/numeric/semantic 표현으로 바꾸고, hybrid embedding 검색으로 top-k 후보를 만든다. |
-| [`lua_callgraph_propagation_agent`](https://github.com/KimJaeHwan/lua_callgraph_propagation_agent) | 최종 graph reasoning 단계. retrieval 후보를 call graph 문맥으로 재검증하고 propagation/ref-backpropagation을 통해 최종 함수 매핑을 결정한다. |
+핵심 입력 위치:
 
-전체 흐름은 다음과 같이 본다.
+- reference features: `data/inputs/reference_features/`
+- runtime retrieval index 기본값: `data/inputs/retrieval_indexes/lua547_x86_runtime`
+- sample binaries: `data/runtime/input/`
+- optional pre-extracted query feature: `data/inputs/query_features/`
 
-```text
-lua_custom_engine_generator
-  -> lua_extract_feature_ghidra
-  -> lua_function_embedding
-  -> lua_callgraph_propagation_agent
-```
+## Quick Start
 
-## 배경
-
-`lua_function_embedding`에서는 symbolic/numeric/semantic hybrid retrieval baseline을 만들었습니다.
-
-하지만 다음과 같은 함수는 local feature만으로 충돌이 발생할 수 있습니다.
-
-- `luaV_execute` vs `llex`
-- `luaL_checktype` vs `callbinTM`
-- architecture가 다른 query와 index 간 매칭
-- 중복 함수가 많은 family
-
-따라서 다음 단계에서는 call graph evidence를 사용합니다.
-
-```text
-Function feature extraction
-  -> hybrid retrieval top-k
-  -> call graph neighborhood collection
-  -> propagation / ref-backpropagation agent
-  -> final mapping decision
-```
-
-## 핵심 목표
-
-- Retrieval 결과를 최종 정답이 아니라 후보 prior로 사용한다.
-- Caller/callee consistency를 graph evidence로 추가한다.
-- High-confidence mapping을 anchor로 고정한다.
-- Anchor 주변으로 mapping confidence를 propagation한다.
-- 이미 매핑된 caller/callee에서 ambiguous function으로 ref-backpropagation한다.
-- Local similarity는 높지만 graph consistency가 낮은 후보를 conflict로 감지한다.
-
-## 현재 구현된 파이프라인
-
-```text
-lua_function_embedding retrieval result
-  + query feature/callgraph
-  + vanilla reference_callgraph.sqlite
-  -> callgraph reranking
-  -> graph-based candidate expansion
-  -> seed-anchor propagation
-  -> accepted / deferred / conflict classification
-  -> deferred feature summary
-  -> optional Local LLM analyst review
-```
-
-## Local LLM Analyst Layer
-
-Local LLM은 최종 판정자가 아니라 애매한 함수에 대한 analyst assistant로 사용한다. 모든 함수에 LLM을 적용하지 않고, retrieval과 graph score만으로 판단이 어려운 `deferred`/`conflict` 함수에 한해 feature와 graph evidence를 검토하게 한다.
-
-대상 예시:
-
-- Retrieval top-k score gap이 작아 후보가 애매한 함수.
-- Retrieval confidence가 낮지만 call graph상 중요한 위치에 있는 함수.
-- Lua core 함수와 custom binding/application logic 사이에서 판단이 필요한 함수.
-- Graph conflict가 발생해 자동 확정하기 어려운 함수.
-
-입력으로 줄 수 있는 정보:
-
-- Function-level extracted feature.
-- Retrieval top-k 후보와 score breakdown.
-- Query/reference call graph neighborhood.
-- 이미 확정된 anchor mapping.
-- 필요한 경우 decompiled code, assembly, pcode snippet.
-
-출력은 최종 mapping을 바로 덮어쓰는 값이 아니라 advisory evidence로 저장한다.
-
-```json
-{
-  "classification": "custom_application_logic",
-  "confidence": 0.78,
-  "reasoning_summary": [
-    "calls Lua C API helper functions",
-    "contains application-specific strings such as user_id and policy",
-    "calls custom_auth_check, which is not present in vanilla Lua reference graph"
-  ],
-  "recommended_action": "prioritize manual review as possible authorization logic"
-}
-```
-
-이 방식은 취약점 자동 분석이 아니라 리버싱 기반 logical vulnerability 분석에서 기능 함수 식별과 분석 우선순위화를 돕는 AX 도구를 목표로 한다.
-
-LM Studio / OpenAI-compatible local server 예시:
+처음 한 번 runtime asset을 준비한다.
 
 ```bash
-python3 scripts/06_run_local_llm_analyst.py \
-  --provider openai-compatible \
-  --base-url http://localhost:1234/v1 \
-  --model qwen/qwen3.6-35b-a3b \
-  --input-json data/eval/results/representative/deferred_analysis_lua547.json \
-  --output-json data/eval/results/representative/llm_analysis_lua547_temp0.json \
-  --temperature 0 \
-  --timeout 180
+../lua_llm/bin/python scripts/21_prepare_runtime_assets.py --force
 ```
 
-`temperature 0` 결과는 보수적인 analyst review에 더 적합했다. `luaL_checktype`처럼 후보군 안에 정답이 있어도 graph evidence가 동점이면 `remain_deferred`로 두는 것이 현재 Agent 철학에 맞다.
+이 단계가 끝나면 다음이 이 레포 안에 준비된다.
 
-## 디렉터리
+- Lua 5.4.7 vanilla reference feature 세트
+- sample binary
+- sample query feature JSON
 
-- `docs/`: Agent 설계, scoring policy, propagation rule 문서.
-- `scripts/`: CLI 실험 스크립트와 evaluation runner.
-- `src/lua_callgraph_propagation_agent/`: 향후 패키지화할 핵심 모듈.
-- `data/inputs/retrieval_results/`: `lua_function_embedding`에서 생성한 top-k retrieval 결과 입력.
-- `data/inputs/callgraphs/`: query/reference call graph 입력.
-- `data/inputs/callgraphs/reference_callgraph.sqlite`: vanilla reference graph를 edge-list로 저장하는 실제 조회용 DB.
-- `data/outputs/mappings/`: Agent가 생성한 mapping 결과.
-- `data/eval/`: propagation 평가 case와 결과.
-- `data/tmp/`: 임시 변환 파일.
-- `tests/`: 단위 테스트 및 작은 fixture 기반 검증.
+기본 실행은 이 레포 안에 복사된 full retrieval index를 사용한다.
 
-## Reference Call Graph DB 생성
+- 기본 index: `data/inputs/retrieval_indexes/lua547_x86_runtime`
+- 즉, 파이프라인 실행 시 sibling repository 경로를 직접 참조하지 않아도 된다.
 
-바닐라 Lua feature JSON에서 SQLite edge-list 기반 reference call graph를 생성한다.
+## 검증된 실행 경로
+
+현재 이 레포에서 끝까지 검증된 경로는 pre-extracted query feature 기준이다.
 
 ```bash
-python3 scripts/01_build_reference_callgraph_db.py --replace
+../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
+  --config data/configs/runtime_lua547_x86_demo_preextracted.json \
+  --stop-on-error
 ```
 
-기본 입력은 `../lua_extract_feature_ghidra/outputs_vanilla`이고, 기본 출력은 `data/inputs/callgraphs/reference_callgraph.sqlite`다. 실제 DB 파일은 재생성 가능한 산출물이므로 Git에는 포함하지 않는다.
+이 실행은 실제로 완료되었고, 결과는 다음 위치에 생성된다.
 
-대상 feature 파일만 확인하려면 다음처럼 실행한다.
+- retrieval: `data/runtime/results/lua547_x86_demo_preextracted/retrieval_result.json`
+- propagation: `data/runtime/results/lua547_x86_demo_preextracted/propagation_result.json`
+- deferred analysis: `data/runtime/results/lua547_x86_demo_preextracted/deferred_analysis.json`
+- final report: `data/runtime/results/lua547_x86_demo_preextracted/final_mapping_report.json`
+
+샘플 실행 결과 요약:
+
+- total cases: `1095`
+- accepted: `1006`
+- deferred: `77`
+- conflict: `12`
+
+## Binary Extraction 경로
+
+binary에서 바로 feature를 뽑는 설정도 포함되어 있다.
 
 ```bash
-python3 scripts/01_build_reference_callgraph_db.py --list-only
+../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
+  --config data/configs/runtime_lua547_x86_demo.json \
+  --stop-on-error
 ```
 
-## Call Graph Scoring MVP
+현재는 runtime wrapper가 `pyghidra` / `Ghidra` 환경을 더 보수적으로 맞추도록 보정되어, 실제 processed binary 대상 extraction smoke test와 MCP 경유 extraction 생성까지 확인했다.
 
-Retrieval top-k 후보를 query call graph anchor와 SQLite reference graph로 재랭킹한다.
+정리 문서:
+
+- [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
+
+다만 대규모 real-binary case는 extraction 이후 retrieval / propagation이 오래 걸릴 수 있으므로, 현재는 pre-extracted config가 가장 빠른 검증 경로다.
+
+## FastMCP
+
+이 레포는 FastMCP 기반 stdio 서버를 제공한다.
+
+실행:
 
 ```bash
-python3 scripts/02_score_with_callgraph.py \
-  --expected query::00119970=luaV_execute \
-  --output-json data/eval/fixtures/result_callgraph_minimal.json
+../lua_llm/bin/python scripts/20_run_mcp_server.py
 ```
 
-현재 minimal fixture에서는 retrieval-only가 `llex`를 top-1로 선택하지만, call graph evidence를 적용하면 `luaV_execute`가 top-1로 올라온다.
+현재 주요 tool:
 
-```text
-retrieval_top1_accuracy   = 0.0
-propagation_top1_accuracy = 1.0
-improved                  = 1
-regressed                 = 0
-```
+- `pipeline_dry_run`
+- `pipeline_run`
+- `extract_query_features`
+- `bulk_query_retrieval`
+- `run_local_llm_analyst`
+- `read_final_report`
+- `read_mapping_record`
 
-## Hybrid Retrieval + Call Graph 평가
+FastMCP 클라이언트 기준으로 `bulk_query_retrieval`, `read_final_report`, `read_mapping_record`, 그리고 실제 binary extraction을 포함한 `pipeline_run` 경로까지 점검했다.
 
-`lua_function_embedding`의 실제 retrieval 평가 결과를 받아 callgraph score correction을 적용한다.
+## Local LLM
 
-```bash
-python3 scripts/03_eval_hybrid_callgraph_cases.py \
-  --suite data/eval/cases/hybrid_callgraph_lua547_eval.json
-```
+Local LLM은 기본 경로가 아니라 optional analyst layer다.
 
-이 평가는 `lua_function_embedding/data/eval/result_dir_index.json`의 `unique_topk_preview`를 retrieval 후보로 사용한다. Query feature에 남아 있는 caller/callee 이름 중 vanilla reference DB에 존재하는 이름을 임시 anchor로 사용한다.
+- deterministic retrieval + graph scoring만으로 확정 가능한 함수는 자동 accept
+- 애매한 함수만 deferred/conflict로 분리
+- 그 뒤에만 `scripts/06_run_local_llm_analyst.py`를 붙인다
 
-현재 8개 Lua 5.4.7 평가 케이스 기준 결과:
+즉, 이 프로젝트의 기본 철학은 “LLM이 최종 판정자가 아니라, 애매한 함수만 도와주는 reviewer”에 가깝다.
 
-```text
-retrieval_top1_accuracy   = 0.75
-propagation_top1_accuracy = 0.875
-improved                  = 1
-regressed                 = 0
-```
+## Retrieval Index 정책
 
-`arm_to_x86_luaV_execute`는 retrieval-only에서 `llex`가 top-1이었지만, callgraph evidence 적용 후 `luaV_execute`로 재랭킹된다. `arm_to_x86_luaL_checktype`은 expected function이 retrieval 후보 목록에 없어서 callgraph 재랭킹만으로는 복구되지 않는다.
+기본 정책은 full index를 내부 복사본으로 유지하는 것이다.
 
-## Anchor Propagation / Deferred Analysis
+- slim 실험에서는 index 크기를 크게 줄일 수 있었지만 정확도가 유의미하게 떨어졌다.
+- 그래서 runtime은 slim이 아니라 full index를 채택했다.
+- 다만 실제 운용 편의성을 위해 full index 자체를 이 레포 안으로 복사해서 사용한다.
+- slim 정책과 실험 결과는 `lua_function_embedding` 쪽 문서로 남겨 두었다.
 
-High-confidence seed anchor를 사용해 주변 mapping을 전파한다.
+## 남겨둔 문서
 
-```bash
-python3 scripts/04_propagate_from_anchors.py \
-  --suite data/eval/cases/anchor_propagation_lua547_eval.json
-```
-
-대표 결과:
-
-```text
-num_cases     = 9
-accepted      = 7
-deferred      = 2
-conflict      = 0
-top1_accuracy = 0.888889
-top5_accuracy = 1.0
-```
-
-Deferred case는 feature summary와 LLM 입력 payload로 변환한다.
-
-```bash
-python3 scripts/05_build_deferred_analysis.py \
-  --input-json data/eval/results/anchor_propagation_lua547_summary.json \
-  --embedding-root ../lua_function_embedding \
-  --output-json data/eval/results/representative/deferred_analysis_lua547.json
-```
-
-결과는 `data/eval/results/representative/deferred_analysis_lua547.json`에 compact representative output으로 남긴다.
-
-## 실제 SO 대상 Name Mapping 흐름
-
-내일 실제 Lua embedded `.so`를 분석할 때는 다음 순서로 진행한다.
-
-```text
-1. lua_extract_feature_ghidra
-   -> SO에서 query feature JSON 추출
-
-2. lua_function_embedding
-   -> query feature로 architecture별 retrieval index 검색
-   -> unique top-k 결과 생성
-
-3. lua_callgraph_propagation_agent
-   -> reference_callgraph.sqlite 준비
-   -> retrieval 후보 callgraph reranking
-   -> candidate expansion
-   -> seed-anchor propagation
-   -> accepted/deferred/conflict 분류
-
-4. deferred analysis
-   -> feature summary와 graph evidence 정리
-
-5. optional Local LLM analyst
-   -> deferred/custom-suspected case만 설명 및 우선순위화
-```
-
-자세한 최종 정리는 [docs/final_project_summary.md](docs/final_project_summary.md)를 참고한다.
-
-## Git 관리 방침
-
-Git에 포함하는 항목:
-
-- Agent 설계 문서.
-- 실행 스크립트와 핵심 모듈.
-- 작은 fixture 또는 평가 case.
-- compact summary / representative result.
-- 디렉터리 유지용 `.gitkeep`.
-
-Git에서 제외하는 항목:
-
-- 대량 retrieval 결과.
-- 대량 call graph dump.
-- generated mapping 결과.
-- root-level full trace result JSON.
-- local DB, model/cache, binary artifact.
-
-## 다음 작업 후보
-
-- 실제 Lua embedded `.so`를 대상으로 feature extraction부터 name mapping까지 end-to-end 실행한다.
-- accepted mapping을 누적 seed anchor로 사용하는 iterative propagation loop를 다듬는다.
-- custom-suspected function을 분리하고 Local LLM analyst review를 적용한다.
-- final mapping exporter를 추가해 accepted/deferred/conflict 결과를 하나의 보고서로 묶는다.
+- [docs/input_schema.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/input_schema.md)
+- [docs/callgraph_propagation_agent_design.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/callgraph_propagation_agent_design.md)
+- [docs/callgraph_store_design.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/callgraph_store_design.md)
+- [docs/mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
+- [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)

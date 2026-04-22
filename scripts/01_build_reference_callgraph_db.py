@@ -3,7 +3,7 @@
 Build a SQLite reference call graph DB from vanilla Lua feature JSON files.
 
 Input:
-  ../lua_extract_feature_ghidra/outputs_vanilla/
+  data/inputs/reference_features/
 
 Output:
   data/inputs/callgraphs/reference_callgraph.sqlite
@@ -18,7 +18,7 @@ Typical commands from the lua_callgraph_propagation_agent project root:
 
   # Build with explicit paths.
   python3 scripts/01_build_reference_callgraph_db.py \
-    --input-root ../lua_extract_feature_ghidra/outputs_vanilla \
+    --input-root data/inputs/reference_features \
     --output-db data/inputs/callgraphs/reference_callgraph.sqlite \
     --replace
 
@@ -42,7 +42,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_INPUT_ROOT = (PROJECT_ROOT / ".." / "lua_extract_feature_ghidra" / "outputs_vanilla").resolve()
+DEFAULT_INPUT_ROOT = (PROJECT_ROOT / "data" / "inputs" / "reference_features").resolve()
 DEFAULT_OUTPUT_DB = PROJECT_ROOT / "data" / "inputs" / "callgraphs" / "reference_callgraph.sqlite"
 SCHEMA_VERSION = "0.1"
 
@@ -186,7 +186,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
 def insert_metadata(conn: sqlite3.Connection, input_root: Path) -> None:
     rows = [
         ("schema_version", SCHEMA_VERSION),
-        ("source", "lua_extract_feature_ghidra.outputs_vanilla"),
+        ("source", "lua_callgraph_propagation_agent.data.inputs.reference_features"),
         ("input_root", str(input_root)),
         ("graph_role", "reference"),
         ("storage_model", "sqlite_edge_list"),

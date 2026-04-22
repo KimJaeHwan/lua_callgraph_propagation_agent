@@ -10,7 +10,7 @@ Typical command from the project root:
 
   python3 scripts/05_build_deferred_analysis.py \
     --input-json data/eval/results/anchor_propagation_lua547_summary.json \
-    --embedding-root ../lua_function_embedding \
+    --embedding-root . \
     --output-json data/eval/results/representative/deferred_analysis_lua547.json
 
 The output is deliberately compact enough to keep in Git. It can also be used
@@ -27,7 +27,7 @@ from typing import Any
 
 DEFAULT_INPUT = Path("data/eval/results/anchor_propagation_lua547_summary.json")
 DEFAULT_OUTPUT = Path("data/eval/results/representative/deferred_analysis_lua547.json")
-DEFAULT_EMBEDDING_ROOT = Path("../lua_function_embedding")
+DEFAULT_EMBEDDING_ROOT = Path(".")
 
 
 REASON_DESCRIPTIONS = {
@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         "--embedding-root",
         type=Path,
         default=DEFAULT_EMBEDDING_ROOT,
-        help="lua_function_embedding project root used to resolve query feature files",
+        help="project root used to resolve query feature files referenced by propagation output",
     )
     parser.add_argument(
         "--top-candidates",
