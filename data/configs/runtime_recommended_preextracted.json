@@ -5,7 +5,7 @@
     "session_name": "recommended_preextracted_run",
     "target_lua_version": "Lua_547",
     "target_architecture": "x86_64",
-    "query_feature_json": "data/inputs/query_features/example_query.json"
+    "query_feature_json": "data/inputs/query_features/lua547_x86_single_deregister_tm_clones.json"
   },
   "steps": {
     "extract_query_features": {

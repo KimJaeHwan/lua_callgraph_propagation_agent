@@ -131,3 +131,4 @@ FastMCP 클라이언트 기준으로 `bulk_query_retrieval`, `read_final_report`
 - [docs/mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
 - [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
 - [docs/runtime_validation_and_configs.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/runtime_validation_and_configs.md)
+- [docs/release_assets.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/release_assets.md)

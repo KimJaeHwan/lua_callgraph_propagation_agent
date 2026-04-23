@@ -3,7 +3,7 @@
   "description": "Recommended default config for binary input. Only change the target binary and target metadata.",
   "paths": {
     "session_name": "recommended_binary_run",
-    "target_binary": "data/runtime/input/example_target.so",
+    "target_binary": "data/runtime/input/lua547_x86_64_O0_vanilla_demo",
     "target_lua_version": "Lua_547",
     "target_architecture": "x86_64",
     "target_opt_level": "O0",
