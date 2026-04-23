@@ -106,11 +106,11 @@ def detect_visible_name_anchors(
         if name not in reference_names:
             continue
 
-        entry_point = func.get("entry_point", "")
-        query_func_id = entry_point if entry_point else name
         anchors.append(
             {
-                "query_function_name": query_func_id,
+                # Runtime propagation resolves query-side anchors by the
+                # extractor's function_name field, not entry_point.
+                "query_function_name": name,
                 "reference_function_name": name,
                 "confidence": 1.0,
                 "source": "name_visible",

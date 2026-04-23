@@ -7,6 +7,7 @@ Ghidra PyGhidra Lua Feature Extractor - FINAL (HighFunction + Listing Hybrid)
 
 #!/usr/bin/env python3
 
+import argparse
 import os
 import sys
 import json
@@ -34,18 +35,31 @@ WORKERS = 8
 # BATCH_SIZE = 1800
 
 # ====================== Helper ======================
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Extract Lua binary features with optional wrapper-supplied metadata."
+    )
+    parser.add_argument("--list-only", action="store_true")
+    parser.add_argument("--lua-version", default=None)
+    parser.add_argument("--architecture", default=None, choices=["arm64", "aarch64", "x86_64"])
+    parser.add_argument("--opt-level", default=None)
+    parser.add_argument("--strip-mode", default=None, choices=["nostrip", "stripped"])
+    return parser.parse_args()
+
+
 def get_binary_info(binary_path: Path):
     if not binary_path.is_file() or binary_path.name.startswith('.'):
-        return None, None, None
+        return None, None, None, None
     parts = binary_path.parts
     try:
         lua_version = next(p for p in parts if p.startswith("Lua_"))
         arch_dir = next(p for p in parts if p in ("arm64", "aarch64", "x86_64"))
         arch = "arm64" if arch_dir in ("arm64", "aarch64") else "x86_64"
         opt_level = next((p for p in parts if p.startswith("O")), "O0")
-        return lua_version, arch, opt_level
+        strip_mode = next((p for p in parts if p in ("nostrip", "stripped")), None)
+        return lua_version, arch, opt_level, strip_mode
     except:
-        return None, None, None
+        return None, None, None, None
 
 # ====================== Pointer Trace ======================
 def trace_ptr(varnode, depth=0, visited=None, memo=None):
@@ -311,7 +325,7 @@ def extract_features_inside_program(currentProgram, lua_version, arch):
 
 
 # ====================== Worker ======================
-def process_binary(binary_path_str):
+def process_binary(task):
     try:
         import pyghidra
         pyghidra.start()
@@ -321,19 +335,40 @@ def process_binary(binary_path_str):
         from ghidra.util.task import ConsoleTaskMonitor
         from ghidra.app.decompiler import DecompInterface
 
+        if isinstance(task, (list, tuple)):
+            binary_path_str, forced_meta = task
+        else:
+            binary_path_str, forced_meta = task, None
+
         binary = Path(binary_path_str)
 
-        lua_version, arch, opt_level = get_binary_info(binary)
+        lua_version, arch, opt_level, detected_strip_mode = get_binary_info(binary)
+        if forced_meta:
+            lua_version = forced_meta.get("lua_version") or lua_version
+            forced_arch = forced_meta.get("architecture")
+            if forced_arch == "aarch64":
+                forced_arch = "arm64"
+            arch = forced_arch or arch
+            opt_level = forced_meta.get("opt_level") or opt_level
+            strip_mode = forced_meta.get("strip_mode") or detected_strip_mode
+        else:
+            strip_mode = detected_strip_mode
+
         if not lua_version:
             return f"[SKIP] invalid path: {binary.name}"
 
         relative = binary.relative_to(BINARIES_DIR)
-        parent_dir = relative.parent  # Lua_547/x86_64/O2/nostrip
+        parent_dir = relative.parent  # Lua_547/x86_64/O2/nostrip or stripped
+        if not strip_mode:
+            strip_mode = parent_dir.name
 
         output_dir = OUTPUT_BASE / parent_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_pattern = f"{arch}_{opt_level}_nostrip_{binary.stem}_*.json"
+        # Keep output filenames deployment-friendly.
+        # Metadata already lives in the directory structure and manifest, so
+        # the filename only needs a stable stem + timestamp.
+        output_pattern = f"{binary.stem}_*.json"
 
         # ✅ 이미 처리됨
         if list(output_dir.glob(output_pattern)):
@@ -368,7 +403,7 @@ def process_binary(binary_path_str):
             results = extract_features_inside_program(currentProgram, lua_version, arch)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = output_dir / f"{arch}_{opt_level}_nostrip_{binary.stem}_{timestamp}.json"
+            output_path = output_dir / f"{binary.stem}_{timestamp}.json"
 
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, ensure_ascii=False)
@@ -394,19 +429,28 @@ def process_binary(binary_path_str):
 
 # ====================== Main ======================
 def main():
+    args = parse_args()
     print(f"[{datetime.now()}] Multiprocessing start (workers={WORKERS})")
 
     binaries = []
+    forced_meta = None
+    if any([args.lua_version, args.architecture, args.opt_level, args.strip_mode]):
+        forced_meta = {
+            "lua_version": args.lua_version,
+            "architecture": args.architecture,
+            "opt_level": args.opt_level,
+            "strip_mode": args.strip_mode,
+        }
 
     for lua_dir in sorted(BINARIES_DIR.glob("Lua_*")):
         for arch_dir in sorted(lua_dir.glob("*")):
             for opt_dir in sorted(arch_dir.glob("O*")):
                 for status_dir in sorted(opt_dir.glob("*")):
-                    if status_dir.name != "nostrip":
+                    if status_dir.name not in {"nostrip", "stripped"}:
                         continue
                     for binary in sorted(status_dir.glob("*")):
                         if binary.is_file() and not binary.name.startswith('.'):
-                            binaries.append(str(binary))
+                            binaries.append((str(binary), forced_meta))
 
     print(f"Total binaries: {len(binaries)}")
 

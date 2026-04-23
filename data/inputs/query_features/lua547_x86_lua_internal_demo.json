@@ -1,0 +1,1735 @@
+[
+  {
+    "function_name": "luaU_undump",
+    "entry_point": "0011c1ab",
+    "basic_block_count": 12,
+    "pcode_opcode_histogram": {
+      "COPY": 76,
+      "INT_SUB": 14,
+      "STORE": 25,
+      "INT_LESS": 5,
+      "INT_SBORROW": 5,
+      "INT_SLESS": 11,
+      "INT_EQUAL": 22,
+      "INT_AND": 26,
+      "POPCOUNT": 11,
+      "INT_ADD": 53,
+      "LOAD": 39,
+      "INT_XOR": 1,
+      "INT_ZEXT": 20,
+      "CBRANCH": 6,
+      "BOOL_NEGATE": 2,
+      "INT_CARRY": 1,
+      "INT_SCARRY": 1,
+      "BRANCH": 2,
+      "CALL": 8,
+      "RETURN": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.231,
+      "INT_SUB": 0.0426,
+      "STORE": 0.076,
+      "INT_LESS": 0.0152,
+      "INT_SBORROW": 0.0152,
+      "INT_SLESS": 0.0334,
+      "INT_EQUAL": 0.0669,
+      "INT_AND": 0.079,
+      "POPCOUNT": 0.0334,
+      "INT_ADD": 0.1611,
+      "LOAD": 0.1185,
+      "INT_XOR": 0.003,
+      "INT_ZEXT": 0.0608,
+      "CBRANCH": 0.0182,
+      "BOOL_NEGATE": 0.0061,
+      "INT_CARRY": 0.003,
+      "INT_SCARRY": 0.003,
+      "BRANCH": 0.0061,
+      "CALL": 0.0243,
+      "RETURN": 0.003
+    },
+    "pcode_instruction_count": 329,
+    "callees": [
+      "loadFunction",
+      "luaC_barrier_",
+      "luaF_newproto",
+      "luaF_newLclosure",
+      "checkHeader",
+      "loadByte",
+      "__stack_chk_fail",
+      "luaD_inctop"
+    ],
+    "callers": [
+      "f_parser"
+    ],
+    "struct_offsets": [
+      -31,
+      40,
+      16,
+      433,
+      -16,
+      144,
+      442
+    ],
+    "read_write": {
+      "-31": {
+        "read": 1,
+        "write": 0
+      },
+      "40": {
+        "read": 1,
+        "write": 0
+      },
+      "16": {
+        "read": 1,
+        "write": 0
+      },
+      "433": {
+        "read": 0,
+        "write": 2
+      },
+      "-16": {
+        "read": 3,
+        "write": 1
+      },
+      "144": {
+        "read": 1,
+        "write": 0
+      },
+      "442": {
+        "read": 1,
+        "write": 0
+      }
+    },
+    "compare": {
+      "433": [
+        64,
+        0,
+        27,
+        61
+      ]
+    },
+    "co_occurrence": [
+      [
+        -31,
+        40
+      ],
+      [
+        -31,
+        16
+      ],
+      [
+        -31,
+        433
+      ],
+      [
+        -31,
+        -16
+      ],
+      [
+        -31,
+        144
+      ],
+      [
+        -31,
+        442
+      ],
+      [
+        40,
+        16
+      ],
+      [
+        40,
+        433
+      ],
+      [
+        40,
+        -16
+      ],
+      [
+        40,
+        144
+      ],
+      [
+        40,
+        442
+      ],
+      [
+        16,
+        433
+      ],
+      [
+        16,
+        -16
+      ],
+      [
+        16,
+        144
+      ],
+      [
+        16,
+        442
+      ],
+      [
+        433,
+        -16
+      ],
+      [
+        433,
+        144
+      ],
+      [
+        433,
+        442
+      ],
+      [
+        -16,
+        144
+      ],
+      [
+        -16,
+        442
+      ],
+      [
+        144,
+        442
+      ]
+    ],
+    "strings": [
+      "binary string"
+    ],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaD_inctop",
+    "entry_point": "0013c316",
+    "basic_block_count": 3,
+    "pcode_opcode_histogram": {
+      "COPY": 21,
+      "INT_SUB": 5,
+      "STORE": 4,
+      "INT_LESS": 3,
+      "INT_SBORROW": 3,
+      "INT_SLESS": 4,
+      "INT_EQUAL": 8,
+      "INT_AND": 9,
+      "POPCOUNT": 4,
+      "INT_ADD": 13,
+      "LOAD": 10,
+      "INT_NOTEQUAL": 1,
+      "BOOL_OR": 1,
+      "INT_ZEXT": 2,
+      "CBRANCH": 1,
+      "CALL": 1,
+      "RETURN": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.2308,
+      "INT_SUB": 0.0549,
+      "STORE": 0.044,
+      "INT_LESS": 0.033,
+      "INT_SBORROW": 0.033,
+      "INT_SLESS": 0.044,
+      "INT_EQUAL": 0.0879,
+      "INT_AND": 0.0989,
+      "POPCOUNT": 0.044,
+      "INT_ADD": 0.1429,
+      "LOAD": 0.1099,
+      "INT_NOTEQUAL": 0.011,
+      "BOOL_OR": 0.011,
+      "INT_ZEXT": 0.022,
+      "CBRANCH": 0.011,
+      "CALL": 0.011,
+      "RETURN": 0.011
+    },
+    "pcode_instruction_count": 91,
+    "callees": [
+      "luaD_growstack"
+    ],
+    "callers": [
+      "loadStringN",
+      "luaU_undump",
+      "luaY_parser"
+    ],
+    "struct_offsets": [
+      40,
+      16
+    ],
+    "read_write": {
+      "40": {
+        "read": 1,
+        "write": 0
+      },
+      "16": {
+        "read": 2,
+        "write": 1
+      }
+    },
+    "compare": {},
+    "co_occurrence": [
+      [
+        40,
+        16
+      ]
+    ],
+    "strings": [],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaD_growstack",
+    "entry_point": "0013c0d8",
+    "basic_block_count": 15,
+    "pcode_opcode_histogram": {
+      "COPY": 60,
+      "INT_SUB": 17,
+      "STORE": 13,
+      "INT_LESS": 10,
+      "INT_SBORROW": 10,
+      "INT_SLESS": 16,
+      "INT_EQUAL": 37,
+      "INT_AND": 56,
+      "POPCOUNT": 16,
+      "INT_ADD": 38,
+      "LOAD": 28,
+      "INT_SRIGHT": 4,
+      "INT_NOTEQUAL": 8,
+      "BOOL_NEGATE": 12,
+      "INT_OR": 8,
+      "BOOL_AND": 2,
+      "INT_ZEXT": 15,
+      "CBRANCH": 7,
+      "CALL": 4,
+      "BRANCH": 2,
+      "INT_CARRY": 2,
+      "INT_SCARRY": 2,
+      "BOOL_OR": 2,
+      "RETURN": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.1622,
+      "INT_SUB": 0.0459,
+      "STORE": 0.0351,
+      "INT_LESS": 0.027,
+      "INT_SBORROW": 0.027,
+      "INT_SLESS": 0.0432,
+      "INT_EQUAL": 0.1,
+      "INT_AND": 0.1514,
+      "POPCOUNT": 0.0432,
+      "INT_ADD": 0.1027,
+      "LOAD": 0.0757,
+      "INT_SRIGHT": 0.0108,
+      "INT_NOTEQUAL": 0.0216,
+      "BOOL_NEGATE": 0.0324,
+      "INT_OR": 0.0216,
+      "BOOL_AND": 0.0054,
+      "INT_ZEXT": 0.0405,
+      "CBRANCH": 0.0189,
+      "CALL": 0.0108,
+      "BRANCH": 0.0054,
+      "INT_CARRY": 0.0054,
+      "INT_SCARRY": 0.0054,
+      "BOOL_OR": 0.0054,
+      "RETURN": 0.0027
+    },
+    "pcode_instruction_count": 370,
+    "callees": [
+      "luaD_reallocstack",
+      "luaG_runerror",
+      "luaD_throw"
+    ],
+    "callers": [
+      "lua_checkstack",
+      "luaD_pretailcall",
+      "luaD_precall",
+      "tryfuncTM",
+      "ccall",
+      "luaT_adjustvarargs",
+      "precallC",
+      "luaD_hook",
+      "luaT_getvarargs",
+      "luaD_inctop"
+    ],
+    "struct_offsets": [
+      40,
+      16,
+      48
+    ],
+    "read_write": {
+      "40": {
+        "read": 1,
+        "write": 0
+      },
+      "16": {
+        "read": 1,
+        "write": 0
+      },
+      "48": {
+        "read": 2,
+        "write": 0
+      }
+    },
+    "compare": {},
+    "co_occurrence": [
+      [
+        40,
+        16
+      ],
+      [
+        40,
+        48
+      ],
+      [
+        16,
+        48
+      ]
+    ],
+    "strings": [
+      "stack overflow"
+    ],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaD_reallocstack",
+    "entry_point": "0013bf90",
+    "basic_block_count": 9,
+    "pcode_opcode_histogram": {
+      "COPY": 68,
+      "INT_SUB": 16,
+      "STORE": 19,
+      "INT_LESS": 5,
+      "INT_SBORROW": 5,
+      "INT_SLESS": 26,
+      "INT_EQUAL": 41,
+      "INT_AND": 92,
+      "POPCOUNT": 18,
+      "INT_ADD": 56,
+      "LOAD": 42,
+      "INT_SRIGHT": 2,
+      "INT_NOTEQUAL": 12,
+      "BOOL_NEGATE": 25,
+      "INT_OR": 24,
+      "INT_ZEXT": 17,
+      "CALL": 5,
+      "INT_CARRY": 7,
+      "INT_SCARRY": 7,
+      "INT_SEXT": 4,
+      "INT_LEFT": 8,
+      "INT_XOR": 4,
+      "CBRANCH": 3,
+      "BRANCH": 2,
+      "BOOL_OR": 1,
+      "RETURN": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.1333,
+      "INT_SUB": 0.0314,
+      "STORE": 0.0373,
+      "INT_LESS": 0.0098,
+      "INT_SBORROW": 0.0098,
+      "INT_SLESS": 0.051,
+      "INT_EQUAL": 0.0804,
+      "INT_AND": 0.1804,
+      "POPCOUNT": 0.0353,
+      "INT_ADD": 0.1098,
+      "LOAD": 0.0824,
+      "INT_SRIGHT": 0.0039,
+      "INT_NOTEQUAL": 0.0235,
+      "BOOL_NEGATE": 0.049,
+      "INT_OR": 0.0471,
+      "INT_ZEXT": 0.0333,
+      "CALL": 0.0098,
+      "INT_CARRY": 0.0137,
+      "INT_SCARRY": 0.0137,
+      "INT_SEXT": 0.0078,
+      "INT_LEFT": 0.0157,
+      "INT_XOR": 0.0078,
+      "CBRANCH": 0.0059,
+      "BRANCH": 0.0039,
+      "BOOL_OR": 0.002,
+      "RETURN": 0.002
+    },
+    "pcode_instruction_count": 510,
+    "callees": [
+      "correctstack",
+      "relstack",
+      "luaD_throw",
+      "luaM_realloc_"
+    ],
+    "callers": [
+      "luaE_resetthread",
+      "luaD_shrinkstack",
+      "luaD_growstack"
+    ],
+    "struct_offsets": [
+      40,
+      536,
+      48,
+      24,
+      7449
+    ],
+    "read_write": {
+      "40": {
+        "read": 1,
+        "write": 1
+      },
+      "536": {
+        "read": 1,
+        "write": 2
+      },
+      "48": {
+        "read": 3,
+        "write": 1
+      },
+      "24": {
+        "read": 3,
+        "write": 0
+      },
+      "7449": {
+        "read": 0,
+        "write": 1
+      }
+    },
+    "compare": {
+      "433": [
+        0
+      ]
+    },
+    "co_occurrence": [
+      [
+        40,
+        536
+      ],
+      [
+        40,
+        48
+      ],
+      [
+        40,
+        24
+      ],
+      [
+        40,
+        7449
+      ],
+      [
+        536,
+        48
+      ],
+      [
+        536,
+        24
+      ],
+      [
+        536,
+        7449
+      ],
+      [
+        48,
+        24
+      ],
+      [
+        48,
+        7449
+      ],
+      [
+        24,
+        7449
+      ]
+    ],
+    "strings": [],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaD_throw",
+    "entry_point": "0013bbd4",
+    "basic_block_count": 7,
+    "pcode_opcode_histogram": {
+      "COPY": 59,
+      "INT_SUB": 8,
+      "STORE": 16,
+      "INT_LESS": 2,
+      "INT_SBORROW": 2,
+      "INT_SLESS": 6,
+      "INT_EQUAL": 12,
+      "INT_AND": 15,
+      "POPCOUNT": 6,
+      "INT_ADD": 43,
+      "LOAD": 33,
+      "CBRANCH": 3,
+      "INT_ZEXT": 7,
+      "INT_CARRY": 1,
+      "INT_SCARRY": 1,
+      "CALL": 4,
+      "CALLIND": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.2694,
+      "INT_SUB": 0.0365,
+      "STORE": 0.0731,
+      "INT_LESS": 0.0091,
+      "INT_SBORROW": 0.0091,
+      "INT_SLESS": 0.0274,
+      "INT_EQUAL": 0.0548,
+      "INT_AND": 0.0685,
+      "POPCOUNT": 0.0274,
+      "INT_ADD": 0.1963,
+      "LOAD": 0.1507,
+      "CBRANCH": 0.0137,
+      "INT_ZEXT": 0.032,
+      "INT_CARRY": 0.0046,
+      "INT_SCARRY": 0.0046,
+      "CALL": 0.0183,
+      "CALLIND": 0.0046
+    },
+    "pcode_instruction_count": 219,
+    "callees": [
+      "luaE_resetthread",
+      "abort",
+      "longjmp",
+      "luaD_throw"
+    ],
+    "callers": [
+      "luaE_checkcstack",
+      "luaD_reallocstack",
+      "luaG_errormsg",
+      "luaD_growstack",
+      "luaH_resize",
+      "error",
+      "luaG_traceexec",
+      "luaM_malloc_",
+      "growstrtab",
+      "lua_error",
+      "lua_yieldk",
+      "lexerror",
+      "luaM_saferealloc_",
+      "checkmode",
+      "luaD_throw"
+    ],
+    "struct_offsets": [
+      641,
+      449,
+      417,
+      521,
+      425,
+      16,
+      433,
+      689,
+      88,
+      697,
+      24
+    ],
+    "read_write": {
+      "641": {
+        "read": 0,
+        "write": 1
+      },
+      "449": {
+        "read": 1,
+        "write": 1
+      },
+      "417": {
+        "read": 1,
+        "write": 0
+      },
+      "521": {
+        "read": 1,
+        "write": 0
+      },
+      "425": {
+        "read": 1,
+        "write": 0
+      },
+      "16": {
+        "read": 1,
+        "write": 0
+      },
+      "433": {
+        "read": 0,
+        "write": 2
+      },
+      "689": {
+        "read": 2,
+        "write": 0
+      },
+      "88": {
+        "read": 3,
+        "write": 0
+      },
+      "697": {
+        "read": 3,
+        "write": 0
+      },
+      "24": {
+        "read": 1,
+        "write": 0
+      }
+    },
+    "compare": {
+      "433": [
+        0
+      ]
+    },
+    "co_occurrence": [
+      [
+        641,
+        449
+      ],
+      [
+        641,
+        417
+      ],
+      [
+        641,
+        521
+      ],
+      [
+        641,
+        425
+      ],
+      [
+        641,
+        16
+      ],
+      [
+        641,
+        433
+      ],
+      [
+        641,
+        689
+      ],
+      [
+        641,
+        88
+      ],
+      [
+        641,
+        697
+      ],
+      [
+        641,
+        24
+      ],
+      [
+        449,
+        417
+      ],
+      [
+        449,
+        521
+      ],
+      [
+        449,
+        425
+      ],
+      [
+        449,
+        16
+      ],
+      [
+        449,
+        433
+      ],
+      [
+        449,
+        689
+      ],
+      [
+        449,
+        88
+      ],
+      [
+        449,
+        697
+      ],
+      [
+        449,
+        24
+      ],
+      [
+        417,
+        521
+      ],
+      [
+        417,
+        425
+      ],
+      [
+        417,
+        16
+      ],
+      [
+        417,
+        433
+      ],
+      [
+        417,
+        689
+      ],
+      [
+        417,
+        88
+      ],
+      [
+        417,
+        697
+      ],
+      [
+        417,
+        24
+      ],
+      [
+        521,
+        425
+      ],
+      [
+        521,
+        16
+      ],
+      [
+        521,
+        433
+      ],
+      [
+        521,
+        689
+      ],
+      [
+        521,
+        88
+      ],
+      [
+        521,
+        697
+      ],
+      [
+        521,
+        24
+      ],
+      [
+        425,
+        16
+      ],
+      [
+        425,
+        433
+      ],
+      [
+        425,
+        689
+      ],
+      [
+        425,
+        88
+      ],
+      [
+        425,
+        697
+      ],
+      [
+        425,
+        24
+      ],
+      [
+        16,
+        433
+      ],
+      [
+        16,
+        689
+      ],
+      [
+        16,
+        88
+      ],
+      [
+        16,
+        697
+      ],
+      [
+        16,
+        24
+      ],
+      [
+        433,
+        689
+      ],
+      [
+        433,
+        88
+      ],
+      [
+        433,
+        697
+      ],
+      [
+        433,
+        24
+      ],
+      [
+        689,
+        88
+      ],
+      [
+        689,
+        697
+      ],
+      [
+        689,
+        24
+      ],
+      [
+        88,
+        697
+      ],
+      [
+        88,
+        24
+      ],
+      [
+        697,
+        24
+      ]
+    ],
+    "strings": [],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaG_runerror",
+    "entry_point": "00133358",
+    "basic_block_count": 7,
+    "pcode_opcode_histogram": {
+      "COPY": 80,
+      "INT_SUB": 9,
+      "STORE": 32,
+      "INT_LESS": 3,
+      "INT_SBORROW": 3,
+      "INT_SLESS": 8,
+      "INT_EQUAL": 16,
+      "INT_AND": 20,
+      "POPCOUNT": 8,
+      "INT_ADD": 59,
+      "CBRANCH": 3,
+      "LOAD": 33,
+      "INT_XOR": 1,
+      "INT_ZEXT": 9,
+      "INT_NOTEQUAL": 1,
+      "BOOL_OR": 1,
+      "CALL": 5,
+      "BOOL_NEGATE": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.274,
+      "INT_SUB": 0.0308,
+      "STORE": 0.1096,
+      "INT_LESS": 0.0103,
+      "INT_SBORROW": 0.0103,
+      "INT_SLESS": 0.0274,
+      "INT_EQUAL": 0.0548,
+      "INT_AND": 0.0685,
+      "POPCOUNT": 0.0274,
+      "INT_ADD": 0.2021,
+      "CBRANCH": 0.0103,
+      "LOAD": 0.113,
+      "INT_XOR": 0.0034,
+      "INT_ZEXT": 0.0308,
+      "INT_NOTEQUAL": 0.0034,
+      "BOOL_OR": 0.0034,
+      "CALL": 0.0171,
+      "BOOL_NEGATE": 0.0034
+    },
+    "pcode_instruction_count": 292,
+    "callees": [
+      "luaC_step",
+      "luaG_errormsg",
+      "luaG_addinfo",
+      "luaO_pushvfstring",
+      "getcurrentline"
+    ],
+    "callers": [
+      "luaV_mod",
+      "luaM_toobig",
+      "luaO_pushvfstring",
+      "luaM_growaux_",
+      "lua_yieldk",
+      "luaV_finishset",
+      "checkclosemth",
+      "luaG_forerror",
+      "setnodevector",
+      "luaD_growstack",
+      "luaG_tointerror",
+      "forprep",
+      "luaE_checkcstack",
+      "findindex",
+      "luaV_concat",
+      "luaH_newkey",
+      "luaV_finishget",
+      "typeerror",
+      "luaV_idiv",
+      "luaG_ordererror"
+    ],
+    "struct_offsets": [
+      32,
+      545,
+      417,
+      580,
+      40,
+      457,
+      425,
+      495,
+      16,
+      433,
+      401,
+      24,
+      409,
+      379
+    ],
+    "read_write": {
+      "32": {
+        "read": 1,
+        "write": 0
+      },
+      "545": {
+        "read": 1,
+        "write": 0
+      },
+      "417": {
+        "read": 1,
+        "write": 0
+      },
+      "580": {
+        "read": 1,
+        "write": 0
+      },
+      "40": {
+        "read": 1,
+        "write": 0
+      },
+      "457": {
+        "read": 2,
+        "write": 0
+      },
+      "425": {
+        "read": 1,
+        "write": 0
+      },
+      "495": {
+        "read": 1,
+        "write": 0
+      },
+      "16": {
+        "read": 3,
+        "write": 1
+      },
+      "433": {
+        "read": 2,
+        "write": 0
+      },
+      "401": {
+        "read": 0,
+        "write": 1
+      },
+      "24": {
+        "read": 1,
+        "write": 0
+      },
+      "409": {
+        "read": 0,
+        "write": 1
+      },
+      "379": {
+        "read": 2,
+        "write": 0
+      }
+    },
+    "compare": {
+      "433": [
+        0,
+        4294967168
+      ]
+    },
+    "co_occurrence": [
+      [
+        32,
+        545
+      ],
+      [
+        32,
+        417
+      ],
+      [
+        32,
+        580
+      ],
+      [
+        32,
+        40
+      ],
+      [
+        32,
+        457
+      ],
+      [
+        32,
+        425
+      ],
+      [
+        32,
+        495
+      ],
+      [
+        32,
+        16
+      ],
+      [
+        32,
+        433
+      ],
+      [
+        32,
+        401
+      ],
+      [
+        32,
+        24
+      ],
+      [
+        32,
+        409
+      ],
+      [
+        32,
+        379
+      ],
+      [
+        545,
+        417
+      ],
+      [
+        545,
+        580
+      ],
+      [
+        545,
+        40
+      ],
+      [
+        545,
+        457
+      ],
+      [
+        545,
+        425
+      ],
+      [
+        545,
+        495
+      ],
+      [
+        545,
+        16
+      ],
+      [
+        545,
+        433
+      ],
+      [
+        545,
+        401
+      ],
+      [
+        545,
+        24
+      ],
+      [
+        545,
+        409
+      ],
+      [
+        545,
+        379
+      ],
+      [
+        417,
+        580
+      ],
+      [
+        417,
+        40
+      ],
+      [
+        417,
+        457
+      ],
+      [
+        417,
+        425
+      ],
+      [
+        417,
+        495
+      ],
+      [
+        417,
+        16
+      ],
+      [
+        417,
+        433
+      ],
+      [
+        417,
+        401
+      ],
+      [
+        417,
+        24
+      ],
+      [
+        417,
+        409
+      ],
+      [
+        417,
+        379
+      ],
+      [
+        580,
+        40
+      ],
+      [
+        580,
+        457
+      ],
+      [
+        580,
+        425
+      ],
+      [
+        580,
+        495
+      ],
+      [
+        580,
+        16
+      ],
+      [
+        580,
+        433
+      ],
+      [
+        580,
+        401
+      ],
+      [
+        580,
+        24
+      ],
+      [
+        580,
+        409
+      ],
+      [
+        580,
+        379
+      ],
+      [
+        40,
+        457
+      ],
+      [
+        40,
+        425
+      ],
+      [
+        40,
+        495
+      ],
+      [
+        40,
+        16
+      ],
+      [
+        40,
+        433
+      ],
+      [
+        40,
+        401
+      ],
+      [
+        40,
+        24
+      ],
+      [
+        40,
+        409
+      ],
+      [
+        40,
+        379
+      ],
+      [
+        457,
+        425
+      ],
+      [
+        457,
+        495
+      ],
+      [
+        457,
+        16
+      ],
+      [
+        457,
+        433
+      ],
+      [
+        457,
+        401
+      ],
+      [
+        457,
+        24
+      ],
+      [
+        457,
+        409
+      ],
+      [
+        457,
+        379
+      ],
+      [
+        425,
+        495
+      ],
+      [
+        425,
+        16
+      ],
+      [
+        425,
+        433
+      ],
+      [
+        425,
+        401
+      ],
+      [
+        425,
+        24
+      ],
+      [
+        425,
+        409
+      ],
+      [
+        425,
+        379
+      ],
+      [
+        495,
+        16
+      ],
+      [
+        495,
+        433
+      ],
+      [
+        495,
+        401
+      ],
+      [
+        495,
+        24
+      ],
+      [
+        495,
+        409
+      ],
+      [
+        495,
+        379
+      ],
+      [
+        16,
+        433
+      ],
+      [
+        16,
+        401
+      ],
+      [
+        16,
+        24
+      ],
+      [
+        16,
+        409
+      ],
+      [
+        16,
+        379
+      ],
+      [
+        433,
+        401
+      ],
+      [
+        433,
+        24
+      ],
+      [
+        433,
+        409
+      ],
+      [
+        433,
+        379
+      ],
+      [
+        401,
+        24
+      ],
+      [
+        401,
+        409
+      ],
+      [
+        401,
+        379
+      ],
+      [
+        24,
+        409
+      ],
+      [
+        24,
+        379
+      ],
+      [
+        409,
+        379
+      ]
+    ],
+    "strings": [],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaG_errormsg",
+    "entry_point": "00133267",
+    "basic_block_count": 3,
+    "pcode_opcode_histogram": {
+      "COPY": 52,
+      "INT_SUB": 6,
+      "STORE": 14,
+      "INT_LESS": 3,
+      "INT_SBORROW": 3,
+      "INT_SLESS": 5,
+      "INT_EQUAL": 10,
+      "INT_AND": 11,
+      "POPCOUNT": 5,
+      "INT_ADD": 42,
+      "LOAD": 32,
+      "CBRANCH": 1,
+      "INT_CARRY": 1,
+      "INT_SCARRY": 1,
+      "INT_ZEXT": 4,
+      "CALL": 2
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.2708,
+      "INT_SUB": 0.0312,
+      "STORE": 0.0729,
+      "INT_LESS": 0.0156,
+      "INT_SBORROW": 0.0156,
+      "INT_SLESS": 0.026,
+      "INT_EQUAL": 0.0521,
+      "INT_AND": 0.0573,
+      "POPCOUNT": 0.026,
+      "INT_ADD": 0.2188,
+      "LOAD": 0.1667,
+      "CBRANCH": 0.0052,
+      "INT_CARRY": 0.0052,
+      "INT_SCARRY": 0.0052,
+      "INT_ZEXT": 0.0208,
+      "CALL": 0.0104
+    },
+    "pcode_instruction_count": 192,
+    "callees": [
+      "luaD_callnoyield",
+      "luaD_throw"
+    ],
+    "callers": [
+      "lua_error",
+      "luaG_runerror"
+    ],
+    "struct_offsets": [
+      417,
+      866,
+      168,
+      425,
+      16,
+      48,
+      433
+    ],
+    "read_write": {
+      "417": {
+        "read": 1,
+        "write": 1
+      },
+      "866": {
+        "read": 2,
+        "write": 0
+      },
+      "168": {
+        "read": 2,
+        "write": 0
+      },
+      "425": {
+        "read": 1,
+        "write": 1
+      },
+      "16": {
+        "read": 5,
+        "write": 1
+      },
+      "48": {
+        "read": 1,
+        "write": 0
+      },
+      "433": {
+        "read": 0,
+        "write": 2
+      }
+    },
+    "compare": {
+      "433": [
+        0
+      ]
+    },
+    "co_occurrence": [
+      [
+        417,
+        866
+      ],
+      [
+        417,
+        168
+      ],
+      [
+        417,
+        425
+      ],
+      [
+        417,
+        16
+      ],
+      [
+        417,
+        48
+      ],
+      [
+        417,
+        433
+      ],
+      [
+        866,
+        168
+      ],
+      [
+        866,
+        425
+      ],
+      [
+        866,
+        16
+      ],
+      [
+        866,
+        48
+      ],
+      [
+        866,
+        433
+      ],
+      [
+        168,
+        425
+      ],
+      [
+        168,
+        16
+      ],
+      [
+        168,
+        48
+      ],
+      [
+        168,
+        433
+      ],
+      [
+        425,
+        16
+      ],
+      [
+        425,
+        48
+      ],
+      [
+        425,
+        433
+      ],
+      [
+        16,
+        48
+      ],
+      [
+        16,
+        433
+      ],
+      [
+        48,
+        433
+      ]
+    ],
+    "strings": [],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  },
+  {
+    "function_name": "luaC_step",
+    "entry_point": "0012382c",
+    "basic_block_count": 7,
+    "pcode_opcode_histogram": {
+      "COPY": 26,
+      "INT_SUB": 6,
+      "STORE": 6,
+      "INT_LESS": 2,
+      "INT_SBORROW": 2,
+      "INT_SLESS": 4,
+      "INT_EQUAL": 8,
+      "INT_AND": 10,
+      "POPCOUNT": 4,
+      "INT_ADD": 17,
+      "LOAD": 15,
+      "INT_ZEXT": 4,
+      "CBRANCH": 3,
+      "CALL": 3,
+      "BRANCH": 2,
+      "RETURN": 1
+    },
+    "pcode_opcode_ratio": {
+      "COPY": 0.2301,
+      "INT_SUB": 0.0531,
+      "STORE": 0.0531,
+      "INT_LESS": 0.0177,
+      "INT_SBORROW": 0.0177,
+      "INT_SLESS": 0.0354,
+      "INT_EQUAL": 0.0708,
+      "INT_AND": 0.0885,
+      "POPCOUNT": 0.0354,
+      "INT_ADD": 0.1504,
+      "LOAD": 0.1327,
+      "INT_ZEXT": 0.0354,
+      "CBRANCH": 0.0265,
+      "CALL": 0.0265,
+      "BRANCH": 0.0177,
+      "RETURN": 0.0088
+    },
+    "pcode_instruction_count": 113,
+    "callees": [
+      "incstep",
+      "genstep",
+      "luaE_setdebt"
+    ],
+    "callers": [
+      "lua_pushfstring",
+      "lua_concat",
+      "lua_pushlstring",
+      "lua_tolstring",
+      "lua_createtable",
+      "luaD_pretailcall",
+      "lua_pushcclosure",
+      "lua_pushvfstring",
+      "luaT_getvarargs",
+      "lua_pushstring",
+      "lua_newthread",
+      "luaG_runerror",
+      "lua_newuserdatauv",
+      "lua_gc",
+      "luaX_newstring",
+      "close_func",
+      "luaD_precall",
+      "tryfuncTM",
+      "precallC"
+    ],
+    "struct_offsets": [
+      24,
+      473,
+      539,
+      535
+    ],
+    "read_write": {
+      "24": {
+        "read": 1,
+        "write": 0
+      },
+      "473": {
+        "read": 1,
+        "write": 0
+      },
+      "539": {
+        "read": 1,
+        "write": 0
+      },
+      "535": {
+        "read": 1,
+        "write": 0
+      }
+    },
+    "compare": {
+      "433": [
+        0,
+        1
+      ]
+    },
+    "co_occurrence": [
+      [
+        24,
+        473
+      ],
+      [
+        24,
+        539
+      ],
+      [
+        24,
+        535
+      ],
+      [
+        473,
+        539
+      ],
+      [
+        473,
+        535
+      ],
+      [
+        539,
+        535
+      ]
+    ],
+    "strings": [],
+    "lua_version": "Lua_547",
+    "architecture": "x86_64"
+  }
+]

@@ -16,6 +16,8 @@ env/
 .ipynb_checkpoints/
 
 # Generated data artifacts
+data/configs/*_mcp_test.json
+
 data/inputs/retrieval_results/**
 !data/inputs/retrieval_results/
 !data/inputs/retrieval_results/.gitkeep

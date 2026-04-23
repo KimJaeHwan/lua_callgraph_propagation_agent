@@ -1,0 +1,64 @@
+{
+  "pipeline_name": "lua547_x86_lua_internal_demo_masked",
+  "description": "Masked internal Lua engine function propagation demo.",
+  "paths": {
+    "session_name": "lua547_x86_lua_internal_demo_masked",
+    "target_binary": "",
+    "target_lua_version": "Lua_547",
+    "target_architecture": "x86_64",
+    "target_opt_level": "O0",
+    "target_strip_mode": "nostrip",
+    "extractor_script": "src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py",
+    "extractor_work_root": "data/runtime/extractor_workspace",
+    "query_feature_output_root": "data/runtime/query_features",
+    "extract_manifest_json": "",
+    "query_feature_json": "data/inputs/query_features/lua547_x86_lua_internal_demo_masked.json",
+    "retrieval_script": "src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py",
+    "retrieval_index": "data/inputs/retrieval_indexes/lua547_x86_runtime",
+    "retrieval_output_json": "data/runtime/results/lua547_x86_lua_internal_demo_masked/retrieval_result.json",
+    "seed_anchor_json": "data/runtime/results/lua547_x86_lua_internal_demo_masked/seed_anchors.json",
+    "runtime_suite_json": "data/runtime/results/lua547_x86_lua_internal_demo_masked/runtime_propagation_suite.json",
+    "reference_feature_root": "data/inputs/reference_features",
+    "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+    "embedding_project_root": ".",
+    "propagation_suite": "",
+    "propagation_output_json": "data/runtime/results/lua547_x86_lua_internal_demo_masked/propagation_result.json",
+    "deferred_output_json": "data/runtime/results/lua547_x86_lua_internal_demo_masked/deferred_analysis.json",
+    "final_report_json": "data/runtime/results/lua547_x86_lua_internal_demo_masked/final_mapping_report.json"
+  },
+  "steps": {
+    "build_reference_db": {
+      "enabled": false,
+      "replace": false
+    },
+    "extract_query_features": {
+      "enabled": false
+    },
+    "bulk_retrieval": {
+      "enabled": true,
+      "candidate_pool": 100,
+      "topk": 20,
+      "scoring_mode": "bonus_v2",
+      "mode": "runtime_query"
+    },
+    "select_seed_anchors": {
+      "enabled": true,
+      "min_top1_score": 0.92,
+      "min_margin": 0.05
+    },
+    "build_runtime_suite": {
+      "enabled": true
+    },
+    "propagation": {
+      "enabled": true
+    },
+    "deferred_analysis": {
+      "enabled": true,
+      "top_candidates": 5
+    },
+    "final_report": {
+      "enabled": true
+    }
+  },
+  "external_steps": []
+}

@@ -108,7 +108,18 @@ def main() -> None:
     if java_home:
         env["JAVA_HOME"] = java_home
 
-    cmd = [args.python_bin, str(args.extractor_script)]
+    cmd = [
+        args.python_bin,
+        str(args.extractor_script),
+        "--lua-version",
+        args.lua_version,
+        "--architecture",
+        arch,
+        "--opt-level",
+        args.opt_level,
+        "--strip-mode",
+        args.strip_mode,
+    ]
     if args.list_only:
         cmd.append("--list-only")
 
