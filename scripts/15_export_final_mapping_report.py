@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Export one compact final report from propagation, deferred analysis, and optional LLM review.
+Export one compact final report from propagation and deferred analysis.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--propagation-json", type=Path, required=True)
     parser.add_argument("--deferred-json", type=Path, required=True)
-    parser.add_argument("--llm-json", type=Path, default=None)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--session-name", required=True)
     return parser.parse_args()
@@ -27,10 +26,10 @@ def load_json(path: Path):
         return json.load(f)
 
 
-def build_mapping_record(row: dict, llm_map: dict, section: str) -> dict:
+def build_mapping_record(row: dict, section: str) -> dict:
     top_candidates = row.get("top_candidates") or []
     top_candidate = top_candidates[0] if top_candidates else {}
-    record = {
+    return {
         "case_id": row.get("case_id"),
         "query_func": row.get("query_func"),
         "query_file": row.get("query_file"),
@@ -41,6 +40,7 @@ def build_mapping_record(row: dict, llm_map: dict, section: str) -> dict:
         "section": section,
         "expected_final_rank": row.get("expected_final_rank"),
         "top1_hit": row.get("top1_hit"),
+        "propagation_round": row.get("propagation_round"),
         "decision_trace": {
             "anchor_summary": row.get("anchor_summary"),
             "top_tied_candidates": row.get("top_tied_candidates"),
@@ -59,26 +59,18 @@ def build_mapping_record(row: dict, llm_map: dict, section: str) -> dict:
             "reverse_validation_ready": True,
         },
     }
-    if row.get("case_id") in llm_map:
-        record["llm_analysis"] = llm_map[row["case_id"]].get("analysis")
-    return record
 
 
 def main() -> None:
     args = parse_args()
     propagation = load_json(args.propagation_json)
     deferred = load_json(args.deferred_json)
-    llm = load_json(args.llm_json) if args.llm_json and args.llm_json.exists() else None
-
-    llm_map = {}
-    if llm:
-        for row in llm.get("results", []):
-            llm_map[row.get("case_id")] = row
 
     accepted = []
     deferred_rows = []
     conflicts = []
     mapping_records = []
+
     for row in propagation.get("results", []):
         compact = {
             "case_id": row.get("case_id"),
@@ -89,18 +81,17 @@ def main() -> None:
             "status": row.get("status"),
             "status_reasons": row.get("status_reasons"),
             "expected_final_rank": row.get("expected_final_rank"),
+            "propagation_round": row.get("propagation_round"),
         }
-        if row.get("case_id") in llm_map:
-            compact["llm_analysis"] = llm_map[row["case_id"]].get("analysis")
         if row.get("status") == "accepted":
             accepted.append(compact)
-            mapping_records.append(build_mapping_record(row, llm_map, "accepted"))
+            mapping_records.append(build_mapping_record(row, "accepted"))
         elif row.get("status") == "conflict":
             conflicts.append(compact)
-            mapping_records.append(build_mapping_record(row, llm_map, "conflicts"))
+            mapping_records.append(build_mapping_record(row, "conflicts"))
         else:
             deferred_rows.append(compact)
-            mapping_records.append(build_mapping_record(row, llm_map, "deferred"))
+            mapping_records.append(build_mapping_record(row, "deferred"))
 
     output = {
         "schema_version": "0.1",
@@ -110,13 +101,13 @@ def main() -> None:
             "accepted": len(accepted),
             "deferred": len(deferred_rows),
             "conflict": len(conflicts),
-            "llm_attached": len([x for x in accepted + deferred_rows + conflicts if "llm_analysis" in x]),
         },
         "accepted": accepted,
         "deferred": deferred_rows,
         "conflicts": conflicts,
         "mapping_records": mapping_records,
         "deferred_analysis_summary": deferred.get("summary"),
+        "round_log": propagation.get("round_log", []),
     }
 
     args.output_json.parent.mkdir(parents=True, exist_ok=True)

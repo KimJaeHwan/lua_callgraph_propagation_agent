@@ -15,9 +15,10 @@ mcp = FastMCP(
     name="lua-callgraph-propagation-agent",
     instructions=(
         "Run the deterministic Lua name-mapping runtime pipeline for analysis targets, "
-        "inspect final mapping reports, and optionally invoke the deferred local LLM analyst."
+        "inspect final mapping reports, and register force anchors when decompile analysis "
+        "reveals a confident mapping for deferred cases."
     ),
-    version="0.3.0",
+    version="0.4.0",
 )
 
 
@@ -128,44 +129,35 @@ def bulk_query_retrieval(
     return _run_command(command)
 
 
-@mcp.tool(description="Run the optional local LLM analyst over deferred cases.")
-def run_local_llm_analyst(
-    provider: str,
-    input_json: str,
-    output_json: str,
-    base_url: str | None = None,
-    model: str | None = None,
-    temperature: float | None = None,
-    timeout: int | None = None,
-    max_cases: int | None = None,
-    response_format_json: bool = False,
-    dry_run: bool = False,
-) -> dict[str, Any]:
-    command = [
-        sys.executable,
-        "scripts/06_run_local_llm_analyst.py",
-        "--provider",
-        provider,
-        "--input-json",
-        str(_resolve_path(input_json)),
-        "--output-json",
-        str(_resolve_path(output_json)),
-    ]
-    if dry_run:
-        command.append("--dry-run")
-    if base_url:
-        command.extend(["--base-url", base_url])
-    if model:
-        command.extend(["--model", model])
-    if temperature is not None:
-        command.extend(["--temperature", str(temperature)])
-    if timeout is not None:
-        command.extend(["--timeout", str(timeout)])
-    if max_cases is not None:
-        command.extend(["--max-cases", str(max_cases)])
-    if response_format_json:
-        command.append("--response-format-json")
-    return _run_command(command)
+
+@mcp.tool(description="List all deferred and conflict cases from the final mapping report for triage.")
+def list_deferred_cases(report_json: str) -> dict[str, Any]:
+    path = _resolve_path(report_json)
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return {
+        "report_json": str(path),
+        "summary": data.get("summary"),
+        "deferred": [
+            {
+                "case_id": row.get("case_id"),
+                "query_func": row.get("query_func"),
+                "predicted_function_name": row.get("predicted_function_name"),
+                "status_reasons": row.get("status_reasons"),
+                "propagation_round": row.get("propagation_round"),
+            }
+            for row in data.get("deferred", [])
+        ],
+        "conflicts": [
+            {
+                "case_id": row.get("case_id"),
+                "query_func": row.get("query_func"),
+                "predicted_function_name": row.get("predicted_function_name"),
+                "status_reasons": row.get("status_reasons"),
+            }
+            for row in data.get("conflicts", [])
+        ],
+    }
 
 
 @mcp.tool(description="Read one final mapping report and return its summary plus a small accepted/deferred/conflict preview.")
@@ -205,6 +197,130 @@ def read_mapping_record(report_json: str, case_id: str) -> dict[str, Any]:
         "source_section": None,
         "record": None,
         "error": f"case_id not found: {case_id}",
+    }
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+@mcp.tool(
+    description=(
+        "Force-register a manually confirmed mapping as a seed anchor after decompile analysis, "
+        "then re-run propagation and regenerate the final report. "
+        "Use this when decompiled code analysis reveals a confident answer for a deferred case. "
+        "query_func is the stripped function name (e.g. sub_401234), "
+        "reference_func is the confirmed Lua function name (e.g. luaD_precall), "
+        "reason should summarize the decompile evidence used to make this decision."
+    )
+)
+def register_force_anchor(
+    config_path: str,
+    query_func: str,
+    reference_func: str,
+    reason: str,
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = config.get("paths", {})
+
+    anchor_path = _resolve_path(paths["seed_anchor_json"])
+    if not anchor_path.exists():
+        return {"ok": False, "error": f"seed_anchor_json not found: {anchor_path}"}
+
+    anchor_data = _load_json(anchor_path)
+
+    # 중복 등록 방지
+    for mapping in anchor_data.get("mappings", []):
+        if mapping.get("query_function_name") == query_func:
+            return {
+                "ok": False,
+                "error": f"already registered: {query_func} → {mapping.get('reference_function_name')}",
+            }
+
+    anchor_data.setdefault("mappings", []).append({
+        "query_function_name": query_func,
+        "reference_function_name": reference_func,
+        "confidence": 1.0,
+        "source": "force_anchor",
+        "status": "accepted",
+        "evidence": [f"force_registered_by_llm_decompile_analysis: {reason}"],
+    })
+    _save_json(anchor_path, anchor_data)
+
+    # build_runtime_suite → propagation (iterative) → deferred_analysis → final_report 재실행
+    steps: list[dict[str, Any]] = []
+
+    def run(name: str, cmd: list[str]) -> bool:
+        result = _run_command(cmd)
+        result["step"] = name
+        steps.append(result)
+        return result["ok"]
+
+    suite_json = _resolve_path(paths["runtime_suite_json"])
+    propagation_json = _resolve_path(paths["propagation_output_json"])
+    deferred_json = _resolve_path(paths["deferred_output_json"])
+    final_json = _resolve_path(paths["final_report_json"])
+    reference_db = _resolve_path(paths["reference_db"])
+    embedding_root = _resolve_path(paths.get("embedding_project_root", "."))
+    retrieval_json = _resolve_path(paths["retrieval_output_json"])
+    session_name = paths["session_name"]
+    deferred_top_candidates = str(config.get("steps", {}).get("deferred_analysis", {}).get("top_candidates", 5))
+
+    if not run("build_runtime_suite", [
+        sys.executable, "scripts/14_build_runtime_propagation_suite.py",
+        "--retrieval-json", str(retrieval_json),
+        "--anchor-json", str(anchor_path),
+        "--reference-db", str(reference_db),
+        "--output-json", str(suite_json),
+        "--embedding-project-root", str(embedding_root),
+        "--propagation-output-json", str(propagation_json),
+    ]):
+        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
+
+    if not run("propagation", [
+        sys.executable, "scripts/04_propagate_from_anchors.py",
+        "--suite", str(suite_json),
+        "--output-json", str(propagation_json),
+        "--iterative",
+    ]):
+        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
+
+    if not run("deferred_analysis", [
+        sys.executable, "scripts/05_build_deferred_analysis.py",
+        "--input-json", str(propagation_json),
+        "--embedding-root", str(embedding_root),
+        "--output-json", str(deferred_json),
+        "--top-candidates", deferred_top_candidates,
+    ]):
+        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
+
+    if not run("final_report", [
+        sys.executable, "scripts/15_export_final_mapping_report.py",
+        "--propagation-json", str(propagation_json),
+        "--deferred-json", str(deferred_json),
+        "--output-json", str(final_json),
+        "--session-name", session_name,
+    ]):
+        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
+
+    # 재실행 후 결과 요약
+    updated_report = _load_json(final_json)
+    summary = updated_report.get("summary", {})
+
+    return {
+        "ok": True,
+        "registered_anchor": f"{query_func} → {reference_func}",
+        "reason": reason,
+        "updated_summary": summary,
+        "report_json": str(final_json),
+        "steps": [{"step": s["step"], "ok": s["ok"], "returncode": s["returncode"]} for s in steps],
     }
 
 

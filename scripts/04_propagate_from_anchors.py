@@ -8,10 +8,27 @@ This script is the first Agent-shaped evaluation flow:
   3. Use anchored caller/callee neighbors to expand and re-rank candidates.
   4. Classify each mapping as accepted, deferred, or conflict.
 
-Typical command from the project root:
+Iterative mode (--iterative):
+  Accepted functions are added back to the anchor set each round so that
+  propagation reaches functions more than one hop away from the initial seeds.
+  Rounds continue until no new functions are accepted or max-rounds is reached.
 
+  Margin tightening per round prevents error accumulation as the anchor chain
+  grows longer and confidence decreases with distance from seeds.
+
+Typical commands from the project root:
+
+  # Single-pass (original behaviour)
   python3 scripts/04_propagate_from_anchors.py \
     --suite data/eval/cases/anchor_propagation_lua547_eval.json
+
+  # Iterative BFS propagation
+  python3 scripts/04_propagate_from_anchors.py \
+    --suite data/eval/cases/anchor_propagation_lua547_eval.json \
+    --iterative \
+    --max-rounds 20 \
+    --min-accepted-per-round 1 \
+    --margin-tightening 0.005
 
 The eval suite may enable visible-name anchors for controlled fixtures. That is
 useful for measuring the propagation policy, but real anonymous binaries should
@@ -49,6 +66,29 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="override output JSON path from suite",
+    )
+    parser.add_argument(
+        "--iterative",
+        action="store_true",
+        help="enable iterative BFS propagation (accepted functions become anchors each round)",
+    )
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=20,
+        help="safety cap on number of propagation rounds (iterative mode only)",
+    )
+    parser.add_argument(
+        "--min-accepted-per-round",
+        type=int,
+        default=1,
+        help="stop if a round accepts fewer than this many functions (iterative mode only)",
+    )
+    parser.add_argument(
+        "--margin-tightening",
+        type=float,
+        default=0.005,
+        help="increase accept_margin by this amount each round to suppress error accumulation",
     )
     return parser.parse_args()
 
@@ -367,6 +407,291 @@ def classify_mapping(
     return "accepted", ["accepted_by_margin_and_graph_evidence"]
 
 
+def _process_one_case(
+    *,
+    case_cfg: dict,
+    retrieval_case: dict,
+    query_row: dict,
+    anchor_set: dict[str, str],
+    ref_db: ReferenceGraphDB,
+    reference_names: set[str],
+    candidate_source: str,
+    primary_opt: str,
+    strip_mode: str,
+    expansion_prior: float,
+    expansion_limit: int,
+    exclude_prefixes: list[str],
+    allow_visible_reference_name_anchors: bool,
+    classification_policy: dict,
+    output_top_candidates: int,
+    propagation_round: int,
+) -> dict:
+    query_name = query_row["function_name"]
+    lua_version = query_row.get("lua_version", "Lua_547")
+    architecture = normalize_architecture(query_row.get("architecture", "x86_64"))
+    expected = case_cfg.get("expected_function", retrieval_case.get("expected_function"))
+
+    callee_anchor_items = anchored_neighbors(
+        query_row.get("callees") or [],
+        seed_anchors=anchor_set,
+        reference_names=reference_names,
+        exclude_prefixes=exclude_prefixes,
+        allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
+        self_name=query_name,
+    )
+    caller_anchor_items = anchored_neighbors(
+        query_row.get("callers") or [],
+        seed_anchors=anchor_set,
+        reference_names=reference_names,
+        exclude_prefixes=exclude_prefixes,
+        allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
+        self_name=query_name,
+    )
+    callee_anchors = [item["reference_function_name"] for item in callee_anchor_items]
+    caller_anchors = [item["reference_function_name"] for item in caller_anchor_items]
+
+    candidates = retrieval_candidates(retrieval_case, candidate_source)
+    retrieval_names = {c["candidate_function_name"] for c in candidates}
+    expanded = ref_db.expansion_candidates(
+        callee_anchors=callee_anchors,
+        caller_anchors=caller_anchors,
+        reference_names=reference_names,
+        lua_version=lua_version,
+        architecture=architecture,
+        strip_mode=strip_mode,
+        primary_opt=primary_opt,
+        exclude_names=retrieval_names,
+        limit=expansion_limit,
+    )
+    for offset, item in enumerate(expanded, start=1):
+        candidates.append({
+            "candidate_function_name": item["candidate_function_name"],
+            "retrieval_prior": expansion_prior,
+            "original_rank": len(retrieval_names) + offset,
+            "candidate_source": "callgraph_expansion",
+            "expansion_support": {
+                "primary_support": item["primary_support"],
+                "auxiliary_support": item["auxiliary_support"],
+            },
+        })
+
+    scored = []
+    for candidate in candidates:
+        item = score_candidate(
+            candidate_name=candidate["candidate_function_name"],
+            retrieval_prior=candidate["retrieval_prior"],
+            callee_anchors=callee_anchors,
+            caller_anchors=caller_anchors,
+            ref_db=ref_db,
+            lua_version=lua_version,
+            architecture=architecture,
+            primary_opt=primary_opt,
+            strip_mode=strip_mode,
+        )
+        item["candidate_source"] = candidate["candidate_source"]
+        item["original_rank"] = candidate["original_rank"]
+        if candidate.get("expansion_support"):
+            item["expansion_support"] = candidate["expansion_support"]
+        scored.append(item)
+
+    reranked = sorted(
+        scored,
+        key=lambda x: (
+            x["final_score"],
+            x["graph_breakdown"]["primary_matches"],
+            x["retrieval_prior"],
+            x["candidate_function_name"],
+        ),
+        reverse=True,
+    )
+    for rank, item in enumerate(reranked, start=1):
+        item["final_rank"] = rank
+
+    status, status_reasons = classify_mapping(reranked=reranked, policy=classification_policy)
+    predicted = reranked[0]["candidate_function_name"] if reranked else None
+    expected_rank = next(
+        (item["final_rank"] for item in reranked if item["candidate_function_name"] == expected),
+        None,
+    )
+    top_tied = [
+        item["candidate_function_name"]
+        for item in reranked
+        if reranked and item["final_score"] == reranked[0]["final_score"]
+    ]
+
+    return {
+        "case_id": case_cfg["case_id"],
+        "mode": retrieval_case.get("mode"),
+        "query_file": retrieval_case.get("query_file"),
+        "query_func": query_name,
+        "architecture": architecture,
+        "expected_function": expected,
+        "predicted_function_name": predicted,
+        "status": status,
+        "status_reasons": status_reasons,
+        "expected_final_rank": expected_rank,
+        "top1_hit": predicted == expected if expected else None,
+        "candidate_count": len(candidates),
+        "retrieval_candidate_count": len(retrieval_names),
+        "expanded_candidate_count": len(expanded),
+        "propagation_round": propagation_round,
+        "anchor_summary": {
+            "callee_anchor_count": len(callee_anchors),
+            "caller_anchor_count": len(caller_anchors),
+            "callee_anchors": callee_anchor_items[:30],
+            "caller_anchors": caller_anchor_items[:30],
+        },
+        "top_tied_candidates": top_tied[:20],
+        "top_candidates": reranked[:output_top_candidates],
+    }
+
+
+def _check_conflicts(
+    round_results: list[dict],
+    already_resolved: dict[str, dict],
+) -> None:
+    accepted_by_scope: dict[tuple[str, str], list[dict]] = {}
+
+    for old in already_resolved.values():
+        if old["status"] != "accepted" or not old["predicted_function_name"]:
+            continue
+        key = (old["query_file"], old["predicted_function_name"])
+        accepted_by_scope.setdefault(key, []).append(old)
+
+    for result in round_results:
+        if result["status"] != "accepted" or not result["predicted_function_name"]:
+            continue
+        key = (result["query_file"], result["predicted_function_name"])
+        accepted_by_scope.setdefault(key, []).append(result)
+
+    for group in accepted_by_scope.values():
+        if len(group) <= 1:
+            continue
+        for result in group:
+            if result["status"] == "accepted":
+                result["status"] = "conflict"
+                result["status_reasons"] = ["duplicate_accepted_mapping_in_query_scope"]
+
+
+def run_iterative_propagation(
+    *,
+    suite_cases: list[dict],
+    retrieval_cases: dict,
+    query_row_cache: dict[str, dict],
+    initial_anchors: dict[str, str],
+    ref_db: ReferenceGraphDB,
+    reference_names: set[str],
+    candidate_source: str,
+    primary_opt: str,
+    strip_mode: str,
+    expansion_prior: float,
+    expansion_limit: int,
+    exclude_prefixes: list[str],
+    allow_visible_reference_name_anchors: bool,
+    base_classification_policy: dict,
+    output_top_candidates: int,
+    max_rounds: int,
+    min_accepted_per_round: int,
+    margin_tightening: float,
+) -> tuple[list[dict], list[dict]]:
+    """
+    BFS-style iterative propagation.
+
+    Each round:
+      1. Score all unresolved functions using the current anchor_set.
+      2. Accepted functions are added to anchor_set for the next round.
+      3. Stop when newly_accepted < min_accepted_per_round or max_rounds reached.
+
+    accept_margin tightens by margin_tightening each round to suppress
+    error accumulation as the anchor chain grows longer from the seeds.
+    """
+    anchor_set = dict(initial_anchors)
+    unresolved_ids = {c["case_id"] for c in suite_cases}
+    resolved: dict[str, dict] = {}
+    last_round_results: dict[str, dict] = {}
+    round_log: list[dict] = []
+
+    for round_num in range(max_rounds):
+        policy = dict(base_classification_policy)
+        base_margin = float(policy.get("accept_margin", 0.015))
+        policy["accept_margin"] = round(base_margin + round_num * margin_tightening, 6)
+
+        round_results: list[dict] = []
+
+        for case_cfg in suite_cases:
+            case_id = case_cfg["case_id"]
+            if case_id not in unresolved_ids:
+                continue
+
+            result = _process_one_case(
+                case_cfg=case_cfg,
+                retrieval_case=retrieval_cases[case_id],
+                query_row=query_row_cache[case_id],
+                anchor_set=anchor_set,
+                ref_db=ref_db,
+                reference_names=reference_names,
+                candidate_source=candidate_source,
+                primary_opt=primary_opt,
+                strip_mode=strip_mode,
+                expansion_prior=expansion_prior,
+                expansion_limit=expansion_limit,
+                exclude_prefixes=exclude_prefixes,
+                allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
+                classification_policy=policy,
+                output_top_candidates=output_top_candidates,
+                propagation_round=round_num,
+            )
+            round_results.append(result)
+            last_round_results[case_id] = result
+
+        _check_conflicts(round_results, resolved)
+
+        newly_accepted: dict[str, dict] = {
+            r["case_id"]: r for r in round_results if r["status"] == "accepted"
+        }
+        newly_conflict: dict[str, dict] = {
+            r["case_id"]: r for r in round_results if r["status"] == "conflict"
+        }
+
+        round_log.append({
+            "round": round_num,
+            "newly_accepted": len(newly_accepted),
+            "newly_conflict": len(newly_conflict),
+            "anchor_set_size": len(anchor_set) + len(newly_accepted),
+            "unresolved_remaining": len(unresolved_ids) - len(newly_accepted) - len(newly_conflict),
+            "policy_margin": policy["accept_margin"],
+        })
+        print(
+            f"[Round {round_num}] "
+            f"accepted={len(newly_accepted)} "
+            f"conflict={len(newly_conflict)} "
+            f"anchor_set={len(anchor_set) + len(newly_accepted)} "
+            f"unresolved={len(unresolved_ids) - len(newly_accepted) - len(newly_conflict)} "
+            f"margin={policy['accept_margin']:.4f}"
+        )
+
+        for case_id, result in {**newly_accepted, **newly_conflict}.items():
+            resolved[case_id] = result
+            unresolved_ids.discard(case_id)
+
+        for case_id, result in newly_accepted.items():
+            anchor_set[result["query_func"]] = result["predicted_function_name"]
+
+        if len(newly_accepted) < min_accepted_per_round:
+            print(f"[Converged] newly_accepted={len(newly_accepted)} < min={min_accepted_per_round}")
+            break
+
+    # Remaining unresolved → keep last round's result (status = deferred)
+    for case_id in unresolved_ids:
+        resolved[case_id] = last_round_results.get(
+            case_id,
+            {"case_id": case_id, "status": "deferred", "status_reasons": ["no_candidates"], "propagation_round": -1},
+        )
+
+    all_results = [resolved[c["case_id"]] for c in suite_cases]
+    return all_results, round_log
+
+
 def compute_summary(results: list[dict]) -> dict:
     total = len(results)
     accepted = [r for r in results if r["status"] == "accepted"]
@@ -410,165 +735,79 @@ def main() -> None:
         suite.get("anchor_policy", {}).get("allow_visible_reference_name_anchors", False)
     )
     classification_policy = suite.get("classification_policy", {})
+    output_top_candidates = int(suite.get("output_top_candidates", 5))
 
     retrieval_cases = {case["case_id"]: case for case in retrieval_result.get("cases", [])}
     seed_anchors = load_seed_anchors(anchor_json)
     ref_db = ReferenceGraphDB(reference_db_path)
     reference_names = ref_db.reference_function_names()
 
-    results = []
+    suite_cases = suite.get("cases", [])
+
+    # Pre-load all query rows once to avoid repeated file I/O across rounds
+    query_row_cache: dict[str, dict] = {}
+    for case_cfg in suite_cases:
+        case_id = case_cfg["case_id"]
+        query_row_cache[case_id] = load_query_function(embedding_root, retrieval_cases[case_id])
+
+    round_log: list[dict] = []
+
     try:
-        for case_cfg in suite.get("cases", []):
-            case_id = case_cfg["case_id"]
-            retrieval_case = retrieval_cases[case_id]
-            query_row = load_query_function(embedding_root, retrieval_case)
-            query_name = query_row["function_name"]
-            lua_version = query_row.get("lua_version", "Lua_547")
-            architecture = normalize_architecture(query_row.get("architecture", "x86_64"))
-            expected = case_cfg.get("expected_function", retrieval_case.get("expected_function"))
-
-            callee_anchor_items = anchored_neighbors(
-                query_row.get("callees") or [],
-                seed_anchors=seed_anchors,
-                reference_names=reference_names,
-                exclude_prefixes=exclude_prefixes,
-                allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
-                self_name=query_name,
+        if args.iterative:
+            print(
+                f"[Iterative] max_rounds={args.max_rounds} "
+                f"min_accepted_per_round={args.min_accepted_per_round} "
+                f"margin_tightening={args.margin_tightening}"
             )
-            caller_anchor_items = anchored_neighbors(
-                query_row.get("callers") or [],
-                seed_anchors=seed_anchors,
+            results, round_log = run_iterative_propagation(
+                suite_cases=suite_cases,
+                retrieval_cases=retrieval_cases,
+                query_row_cache=query_row_cache,
+                initial_anchors=seed_anchors,
+                ref_db=ref_db,
                 reference_names=reference_names,
-                exclude_prefixes=exclude_prefixes,
-                allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
-                self_name=query_name,
-            )
-            callee_anchors = [item["reference_function_name"] for item in callee_anchor_items]
-            caller_anchors = [item["reference_function_name"] for item in caller_anchor_items]
-
-            candidates = retrieval_candidates(retrieval_case, candidate_source)
-            retrieval_names = {c["candidate_function_name"] for c in candidates}
-            expanded = ref_db.expansion_candidates(
-                callee_anchors=callee_anchors,
-                caller_anchors=caller_anchors,
-                reference_names=reference_names,
-                lua_version=lua_version,
-                architecture=architecture,
-                strip_mode=strip_mode,
+                candidate_source=candidate_source,
                 primary_opt=primary_opt,
-                exclude_names=retrieval_names,
-                limit=expansion_limit,
+                strip_mode=strip_mode,
+                expansion_prior=expansion_prior,
+                expansion_limit=expansion_limit,
+                exclude_prefixes=exclude_prefixes,
+                allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
+                base_classification_policy=classification_policy,
+                output_top_candidates=output_top_candidates,
+                max_rounds=args.max_rounds,
+                min_accepted_per_round=args.min_accepted_per_round,
+                margin_tightening=args.margin_tightening,
             )
-            for offset, item in enumerate(expanded, start=1):
-                candidates.append(
-                    {
-                        "candidate_function_name": item["candidate_function_name"],
-                        "retrieval_prior": expansion_prior,
-                        "original_rank": len(retrieval_names) + offset,
-                        "candidate_source": "callgraph_expansion",
-                        "expansion_support": {
-                            "primary_support": item["primary_support"],
-                            "auxiliary_support": item["auxiliary_support"],
-                        },
-                    }
-                )
-
-            scored = []
-            for candidate in candidates:
-                item = score_candidate(
-                    candidate_name=candidate["candidate_function_name"],
-                    retrieval_prior=candidate["retrieval_prior"],
-                    callee_anchors=callee_anchors,
-                    caller_anchors=caller_anchors,
+        else:
+            results = []
+            for case_cfg in suite_cases:
+                case_id = case_cfg["case_id"]
+                result = _process_one_case(
+                    case_cfg=case_cfg,
+                    retrieval_case=retrieval_cases[case_id],
+                    query_row=query_row_cache[case_id],
+                    anchor_set=seed_anchors,
                     ref_db=ref_db,
-                    lua_version=lua_version,
-                    architecture=architecture,
+                    reference_names=reference_names,
+                    candidate_source=candidate_source,
                     primary_opt=primary_opt,
                     strip_mode=strip_mode,
+                    expansion_prior=expansion_prior,
+                    expansion_limit=expansion_limit,
+                    exclude_prefixes=exclude_prefixes,
+                    allow_visible_reference_name_anchors=allow_visible_reference_name_anchors,
+                    classification_policy=classification_policy,
+                    output_top_candidates=output_top_candidates,
+                    propagation_round=0,
                 )
-                item["candidate_source"] = candidate["candidate_source"]
-                item["original_rank"] = candidate["original_rank"]
-                if candidate.get("expansion_support"):
-                    item["expansion_support"] = candidate["expansion_support"]
-                scored.append(item)
+                results.append(result)
 
-            reranked = sorted(
-                scored,
-                key=lambda item: (
-                    item["final_score"],
-                    item["graph_breakdown"]["primary_matches"],
-                    item["retrieval_prior"],
-                    item["candidate_function_name"],
-                ),
-                reverse=True,
-            )
-            for rank, item in enumerate(reranked, start=1):
-                item["final_rank"] = rank
+            # Single-pass conflict check
+            _check_conflicts(results, {})
 
-            status, status_reasons = classify_mapping(
-                reranked=reranked,
-                policy=classification_policy,
-            )
-            predicted = reranked[0]["candidate_function_name"] if reranked else None
-            expected_rank = next(
-                (
-                    item["final_rank"]
-                    for item in reranked
-                    if item["candidate_function_name"] == expected
-                ),
-                None,
-            )
-            top_tied = [
-                item["candidate_function_name"]
-                for item in reranked
-                if reranked and item["final_score"] == reranked[0]["final_score"]
-            ]
-
-            results.append(
-                {
-                    "case_id": case_id,
-                    "mode": retrieval_case.get("mode"),
-                    "query_file": retrieval_case.get("query_file"),
-                    "query_func": query_name,
-                    "architecture": architecture,
-                    "expected_function": expected,
-                    "predicted_function_name": predicted,
-                    "status": status,
-                    "status_reasons": status_reasons,
-                    "expected_final_rank": expected_rank,
-                    "top1_hit": predicted == expected if expected else None,
-                    "candidate_count": len(candidates),
-                    "retrieval_candidate_count": len(retrieval_names),
-                    "expanded_candidate_count": len(expanded),
-                    "anchor_summary": {
-                        "callee_anchor_count": len(callee_anchors),
-                        "caller_anchor_count": len(caller_anchors),
-                        "callee_anchors": callee_anchor_items[:30],
-                        "caller_anchors": caller_anchor_items[:30],
-                    },
-                    "top_tied_candidates": top_tied[:20],
-                    "top_candidates": reranked[: int(suite.get("output_top_candidates", 5))],
-                }
-            )
     finally:
         ref_db.close()
-
-    # A one-to-one conflict check is intentionally conservative. It flags only
-    # accepted mappings inside the same query file that point to the same
-    # reference function.
-    accepted_by_scope: dict[tuple[str, str], list[dict]] = {}
-    for result in results:
-        if result["status"] != "accepted" or not result["predicted_function_name"]:
-            continue
-        key = (result["query_file"], result["predicted_function_name"])
-        accepted_by_scope.setdefault(key, []).append(result)
-
-    for group in accepted_by_scope.values():
-        if len(group) <= 1:
-            continue
-        for result in group:
-            result["status"] = "conflict"
-            result["status_reasons"] = ["duplicate_accepted_mapping_in_query_scope"]
 
     output = {
         "schema_version": "0.1",
@@ -577,6 +816,8 @@ def main() -> None:
         "anchor_policy": suite.get("anchor_policy"),
         "candidate_expansion": suite.get("candidate_expansion"),
         "classification_policy": classification_policy,
+        "iterative": args.iterative,
+        "round_log": round_log,
         "summary": compute_summary(results),
         "results": results,
     }
@@ -586,6 +827,10 @@ def main() -> None:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     print(f"[OK] wrote result: {output_json}")
+    if round_log:
+        print("[Round log]")
+        for entry in round_log:
+            print(f"  Round {entry['round']}: accepted={entry['newly_accepted']} anchor_set={entry['anchor_set_size']} unresolved={entry['unresolved_remaining']}")
     print(json.dumps(output["summary"], indent=2, ensure_ascii=False))
     for result in results:
         print(

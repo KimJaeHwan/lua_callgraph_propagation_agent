@@ -191,10 +191,16 @@ def build_step_commands(config: dict) -> list[dict]:
             "--min-margin",
             str(auto_anchor.get("min_margin", 0.05)),
         ]
+        # optional: visible-name detection requires query features + reference DB
+        query_feature_json = paths.get("extract_manifest_json") or paths.get("query_feature_json")
+        if query_feature_json:
+            cmd.extend(["--query-json", str(resolve_path(query_feature_json))])
+        if paths.get("reference_db"):
+            cmd.extend(["--reference-db", str(resolve_path(paths["reference_db"]))])
         commands.append(
             {
                 "name": "select_seed_anchors",
-                "description": "Select deterministic seed anchors from high-confidence retrieval results",
+                "description": "Select deterministic seed anchors (visible names + high-confidence retrieval)",
                 "cmd": cmd,
             }
         )
@@ -235,6 +241,8 @@ def build_step_commands(config: dict) -> list[dict]:
             "--output-json",
             str(resolve_path(paths["propagation_output_json"])),
         ]
+        if propagation.get("iterative", True):
+            cmd.append("--iterative")
         commands.append(
             {
                 "name": "propagation",
@@ -266,43 +274,6 @@ def build_step_commands(config: dict) -> list[dict]:
             }
         )
 
-    llm = steps.get("llm_analyst", {})
-    if llm.get("enabled", False):
-        cmd = [
-            python,
-            "scripts/06_run_local_llm_analyst.py",
-            "--provider",
-            llm.get("provider", "dry-run"),
-            "--input-json",
-            str(resolve_path(paths["deferred_output_json"])),
-            "--output-json",
-            str(resolve_path(paths["llm_output_json"])),
-        ]
-        if llm.get("provider") != "dry-run":
-            if llm.get("base_url"):
-                cmd.extend(["--base-url", llm["base_url"]])
-            if llm.get("model"):
-                cmd.extend(["--model", llm["model"]])
-            if llm.get("temperature") is not None:
-                cmd.extend(["--temperature", str(llm["temperature"])])
-            if llm.get("timeout") is not None:
-                cmd.extend(["--timeout", str(llm["timeout"])])
-            if llm.get("response_format_json", False):
-                cmd.append("--response-format-json")
-        else:
-            cmd.append("--dry-run")
-
-        if llm.get("max_cases") is not None:
-            cmd.extend(["--max-cases", str(llm["max_cases"])])
-
-        commands.append(
-            {
-                "name": "llm_analyst",
-                "description": "Run optional Local LLM analyst over deferred/conflict payloads",
-                "cmd": cmd,
-            }
-        )
-
     final_report = steps.get("final_report", {})
     if final_report.get("enabled", False):
         cmd = [
@@ -317,9 +288,6 @@ def build_step_commands(config: dict) -> list[dict]:
             "--session-name",
             paths["session_name"],
         ]
-        llm_output = paths.get("llm_output_json")
-        if llm_output:
-            cmd.extend(["--llm-json", str(resolve_path(llm_output))])
         commands.append(
             {
                 "name": "final_report",
