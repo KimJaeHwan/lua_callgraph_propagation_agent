@@ -8,8 +8,43 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _default_runtime_paths(paths: dict) -> dict[str, Any]:
+    """Mirror of default_runtime_paths() in scripts/10_run_name_mapping_pipeline.py.
+    Fills in conventional output paths from session_name / lua_version / architecture
+    so that configs only need to specify the fields that differ from convention.
+    """
+    session = paths.get("session_name", "runtime_session")
+    lua_version = paths.get("target_lua_version") or "Lua_547"
+    architecture = paths.get("target_architecture") or "x86_64"
+    normalized_arch = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
+    result_root = f"data/runtime/results/{session}"
+    query_root = f"data/runtime/query_features/{session}"
+
+    defaults: dict[str, Any] = {
+        "session_name": session,
+        "target_lua_version": lua_version,
+        "target_architecture": architecture,
+        "extract_manifest_json": f"{query_root}/extract_manifest.json",
+        "query_feature_json": "",
+        "retrieval_index": f"data/inputs/retrieval_indexes/{lua_version}/{normalized_arch}/runtime",
+        "retrieval_output_json": f"{result_root}/retrieval_result.json",
+        "seed_anchor_json": f"{result_root}/seed_anchors.json",
+        "runtime_suite_json": f"{result_root}/runtime_propagation_suite.json",
+        "reference_db": f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
+        "embedding_project_root": ".",
+        "propagation_output_json": f"{result_root}/propagation_result.json",
+        "deferred_output_json": f"{result_root}/deferred_analysis.json",
+        "final_report_json": f"{result_root}/final_mapping_report.json",
+    }
+
+    merged = defaults.copy()
+    for key, value in paths.items():
+        if value not in (None, ""):
+            merged[key] = value
+    return merged
 
 mcp = FastMCP(
     name="lua-callgraph-propagation-agent",
@@ -228,7 +263,7 @@ def register_force_anchor(
     reason: str,
 ) -> dict[str, Any]:
     config = _load_json(_resolve_path(config_path))
-    paths = config.get("paths", {})
+    paths = _default_runtime_paths(config.get("paths", {}))
 
     anchor_path = _resolve_path(paths["seed_anchor_json"])
     if not anchor_path.exists():
