@@ -46,7 +46,7 @@ DEFAULT_SAMPLE_QUERY_JSON = (
 )
 
 DEFAULT_TARGET_REFERENCE_ROOT = PROJECT_ROOT / "data" / "inputs" / "reference_features"
-DEFAULT_TARGET_INDEX_DIR = PROJECT_ROOT / "data" / "inputs" / "retrieval_indexes" / "lua547_x86_runtime"
+DEFAULT_TARGET_INDEX_DIR = PROJECT_ROOT / "data" / "inputs" / "retrieval_indexes" / "Lua_547" / "x86_64" / "runtime"
 DEFAULT_TARGET_BINARY = PROJECT_ROOT / "data" / "runtime" / "input" / "lua547_x86_64_O0_vanilla_demo"
 DEFAULT_TARGET_QUERY_JSON = PROJECT_ROOT / "data" / "inputs" / "query_features" / "lua547_x86_custom_demo.json"
 

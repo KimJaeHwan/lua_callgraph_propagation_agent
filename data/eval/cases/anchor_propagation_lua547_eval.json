@@ -5,7 +5,7 @@
   "embedding_project_root": "../lua_function_embedding",
   "retrieval_result_json": "../lua_function_embedding/data/eval/tmp/result_expanded_callgraph.json",
   "anchor_json": "data/eval/anchors/lua547_seed_anchors.json",
-  "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+  "reference_db": "data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite",
   "output_json": "data/eval/results/anchor_propagation_lua547_summary.json",
   "candidate_source": "unique_topk_preview",
   "output_top_candidates": 5,

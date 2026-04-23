@@ -1,6 +1,6 @@
 # MCP Runtime
 
-`lua_callgraph_propagation_agent`는 이제 단일 레포 런타임을 목표로 하며, Local LLM보다 먼저 FastMCP 기반 MCP 인터페이스를 제공한다.
+`lua_callgraph_propagation_agent`는 단일 레포 런타임을 목표로 하며, FastMCP 기반 MCP 인터페이스를 제공한다.
 
 기본 retrieval index는 실험용 slim index가 아니라 이 레포 안에 복사된 full index를 사용한다. slim index는 정확도 저하가 확인되어 실험 결과로만 남겨 두었다.
 
@@ -8,7 +8,7 @@
 
 - 여러 개의 numbered script를 MCP 툴로 노출한다.
 - 내일 실제 `.so`가 들어왔을 때 CLI와 MCP 둘 다 같은 실행 경로를 사용하게 만든다.
-- Local LLM은 optional tool로 남기고, 기본 흐름은 deterministic pipeline 중심으로 유지한다.
+- 사람 또는 상위 agent가 deferred case를 조회하고 force anchor를 주입할 수 있게 만든다.
 
 ## 실행
 
@@ -31,8 +31,10 @@
   - 대상 바이너리에서 query feature를 추출한다.
 - `bulk_query_retrieval`
   - 추출된 feature JSON 또는 manifest를 기반으로 retrieval top-k를 생성한다.
-- `run_local_llm_analyst`
-  - optional 단계로 deferred case에 대해서만 LLM 분석을 요청한다.
+- `list_deferred_cases`
+  - deferred/conflict case를 analyst가 보기 좋게 요약한다.
+- `register_force_anchor`
+  - analyst가 확정한 anchor를 입력해 propagation을 다시 돌릴 수 있게 한다.
 - `read_final_report`
   - 최종 report의 summary와 일부 preview를 읽는다.
 - `read_mapping_record`

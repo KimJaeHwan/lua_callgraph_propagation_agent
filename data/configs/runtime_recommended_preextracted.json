@@ -1,20 +1,20 @@
 {
-  "pipeline_name": "lua_name_mapping_pipeline",
-  "description": "Minimal example config. Unspecified runtime paths are filled automatically by the pipeline.",
+  "pipeline_name": "runtime_recommended_preextracted",
+  "description": "Recommended default config for pre-extracted query feature input.",
   "paths": {
-    "session_name": "example_session",
-    "target_binary": "data/runtime/input/example_target.so",
+    "session_name": "recommended_preextracted_run",
     "target_lua_version": "Lua_547",
-    "target_architecture": "x86_64"
+    "target_architecture": "x86_64",
+    "query_feature_json": "data/inputs/query_features/example_query.json"
   },
   "steps": {
     "extract_query_features": {
-      "enabled": true
+      "enabled": false
     },
     "bulk_retrieval": {
       "enabled": true,
-      "candidate_pool": 200,
-      "topk": 50,
+      "candidate_pool": 100,
+      "topk": 20,
       "scoring_mode": "bonus_v2",
       "mode": "runtime_query"
     },

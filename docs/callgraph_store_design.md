@@ -212,7 +212,7 @@ reference O0 edges:
 초기 구현에서 사용할 위치:
 
 ```text
-data/inputs/callgraphs/reference_callgraph.sqlite
+data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite
 data/inputs/callgraphs/query_callgraph.sqlite        # optional
 data/eval/fixtures/*.json                            # small fixture only
 ```
@@ -236,7 +236,7 @@ data/inputs/reference_features
 기본 출력:
 
 ```text
-data/inputs/callgraphs/reference_callgraph.sqlite
+data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite
 ```
 
 대상 feature JSON만 확인하려면 다음 명령을 사용한다.
@@ -247,7 +247,7 @@ python3 scripts/01_build_reference_callgraph_db.py --list-only
 
 ## 10. Scoring MVP 메모
 
-초기 연구 단계에서는 생성된 `reference_callgraph.sqlite`를 사용해 retrieval 후보를 call graph evidence로 재랭킹하는 실험용 스크립트를 별도로 운용했다.
+초기 연구 단계에서는 생성된 `data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite`를 사용해 retrieval 후보를 call graph evidence로 재랭킹하는 실험용 스크립트를 별도로 운용했다.
 
 Minimal fixture의 의도는 retrieval 점수만으로는 `llex`가 근소하게 앞서지만, anchor callee evidence로 `luaV_execute`를 승격시키는 것이다.
 

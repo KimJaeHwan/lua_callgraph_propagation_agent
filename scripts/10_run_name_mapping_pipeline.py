@@ -72,6 +72,47 @@ def resolve_path(path: str | Path) -> Path:
     return p if p.is_absolute() else (PROJECT_ROOT / p).resolve()
 
 
+def default_runtime_paths(paths: dict) -> dict[str, Any]:
+    session = paths.get("session_name", "runtime_session")
+    lua_version = paths.get("target_lua_version") or "Lua_547"
+    architecture = paths.get("target_architecture") or "x86_64"
+    normalized_arch = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
+    result_root = f"data/runtime/results/{session}"
+    query_root = f"data/runtime/query_features/{session}"
+
+    defaults: dict[str, Any] = {
+        "session_name": session,
+        "target_binary": "",
+        "target_lua_version": lua_version,
+        "target_architecture": architecture,
+        "target_opt_level": "O0",
+        "target_strip_mode": "nostrip",
+        "extractor_script": "src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py",
+        "extractor_work_root": "data/runtime/extractor_workspace",
+        "query_feature_output_root": "data/runtime/query_features",
+        "extract_manifest_json": f"{query_root}/extract_manifest.json",
+        "query_feature_json": "",
+        "retrieval_script": "src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py",
+        "retrieval_index": f"data/inputs/retrieval_indexes/{lua_version}/{normalized_arch}/runtime",
+        "retrieval_output_json": f"{result_root}/retrieval_result.json",
+        "seed_anchor_json": f"{result_root}/seed_anchors.json",
+        "runtime_suite_json": f"{result_root}/runtime_propagation_suite.json",
+        "reference_feature_root": "data/inputs/reference_features",
+        "reference_db": f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
+        "embedding_project_root": ".",
+        "propagation_suite": "",
+        "propagation_output_json": f"{result_root}/propagation_result.json",
+        "deferred_output_json": f"{result_root}/deferred_analysis.json",
+        "final_report_json": f"{result_root}/final_mapping_report.json",
+    }
+
+    merged = defaults.copy()
+    for key, value in paths.items():
+        if value not in (None, ""):
+            merged[key] = value
+    return merged
+
+
 def normalize_command(command: list[str]) -> list[str]:
     result: list[str] = []
     for token in command:
@@ -86,7 +127,7 @@ def normalize_command(command: list[str]) -> list[str]:
 
 def build_step_commands(config: dict) -> list[dict]:
     python = sys.executable
-    paths = config.get("paths", {})
+    paths = default_runtime_paths(config.get("paths", {}))
     steps = config.get("steps", {})
 
     commands: list[dict] = []
@@ -165,10 +206,10 @@ def build_step_commands(config: dict) -> list[dict]:
             "--mode",
             retrieval.get("mode", "runtime_query"),
         ]
-        if paths.get("extract_manifest_json"):
-            cmd.extend(["--extract-manifest", str(resolve_path(paths["extract_manifest_json"]))])
-        elif paths.get("query_feature_json"):
+        if paths.get("query_feature_json"):
             cmd.extend(["--query-json", str(resolve_path(paths["query_feature_json"]))])
+        elif paths.get("extract_manifest_json"):
+            cmd.extend(["--extract-manifest", str(resolve_path(paths["extract_manifest_json"]))])
         commands.append(
             {
                 "name": "bulk_retrieval",
@@ -192,7 +233,7 @@ def build_step_commands(config: dict) -> list[dict]:
             str(auto_anchor.get("min_margin", 0.05)),
         ]
         # optional: visible-name detection requires query features + reference DB
-        query_feature_json = paths.get("extract_manifest_json") or paths.get("query_feature_json")
+        query_feature_json = paths.get("query_feature_json") or paths.get("extract_manifest_json")
         if query_feature_json:
             cmd.extend(["--query-json", str(resolve_path(query_feature_json))])
         if paths.get("reference_db"):

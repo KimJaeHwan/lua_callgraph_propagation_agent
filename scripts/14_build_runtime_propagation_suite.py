@@ -20,7 +20,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--retrieval-json", type=Path, required=True)
     parser.add_argument("--anchor-json", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
-    parser.add_argument("--reference-db", type=Path, default=PROJECT_ROOT / "data" / "inputs" / "callgraphs" / "reference_callgraph.sqlite")
+    parser.add_argument(
+        "--lua-version",
+        default="Lua_547",
+        help="reference Lua version used when --reference-db is omitted",
+    )
+    parser.add_argument(
+        "--reference-db",
+        type=Path,
+        default=None,
+    )
     parser.add_argument("--embedding-project-root", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--propagation-output-json", type=Path, required=True)
     return parser.parse_args()
@@ -33,6 +42,18 @@ def load_json(path: Path):
 
 def main() -> None:
     args = parse_args()
+    reference_db = (
+        args.reference_db.resolve()
+        if args.reference_db is not None
+        else (
+            PROJECT_ROOT
+            / "data"
+            / "inputs"
+            / "callgraphs"
+            / args.lua_version
+            / "reference_callgraph.sqlite"
+        ).resolve()
+    )
     retrieval = load_json(args.retrieval_json)
     cases = []
     for row in retrieval.get("cases", []):
@@ -50,7 +71,7 @@ def main() -> None:
         "embedding_project_root": str(args.embedding_project_root.resolve()),
         "retrieval_result_json": str(args.retrieval_json.resolve()),
         "anchor_json": str(args.anchor_json.resolve()),
-        "reference_db": str(args.reference_db.resolve()),
+        "reference_db": str(reference_db),
         "output_json": str(args.propagation_output_json.resolve()),
         "candidate_source": "unique_topk_preview",
         "output_top_candidates": 5,

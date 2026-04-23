@@ -4,7 +4,7 @@
   "description": "Expanded evaluation of lua_function_embedding retrieval results with SQLite callgraph score correction.",
   "embedding_project_root": "../lua_function_embedding",
   "retrieval_result_json": "../lua_function_embedding/data/eval/tmp/result_expanded_callgraph.json",
-  "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite",
+  "reference_db": "data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite",
   "output_json": "data/eval/results/hybrid_callgraph_lua547_expanded_result.json",
   "candidate_source": "unique_topk_preview",
   "anchor_policy": {

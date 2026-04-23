@@ -6,7 +6,7 @@
 
 Retrieval은 단일 함수 feature 기반 후보 생성기로 사용한다. 최종 판단은 caller/callee 일관성, 주변 함수의 high-confidence mapping, graph conflict 여부를 함께 본다.
 
-이 Agent는 취약점 자동 판정기가 아니다. 목표는 리버싱 기반 logical vulnerability 분석에서 기능 함수 식별과 분석 우선순위화를 보조하는 것이다. Local LLM은 필요한 경우 feature와 코드 문맥을 요약하는 analyst layer로만 사용하고, 최종 확정은 retrieval score, graph score, conflict policy를 함께 고려한다.
+이 Agent는 취약점 자동 판정기가 아니다. 목표는 리버싱 기반 logical vulnerability 분석에서 기능 함수 식별과 분석 우선순위화를 보조하는 것이다. 기본 경로는 deterministic retrieval + graph propagation이며, 애매한 케이스는 MCP를 통해 analyst가 deferred case를 조회하고 force anchor를 주입하는 방식으로 다룬다.
 
 ## 2. 입력
 
@@ -15,7 +15,7 @@ Retrieval은 단일 함수 feature 기반 후보 생성기로 사용한다. 최�
 ```text
 retrieval_topk.json
 query_callgraph.json
-reference_callgraph.sqlite
+data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite
 ```
 
 예상 입력 정보:
@@ -55,7 +55,7 @@ Agent 출력은 최종 mapping과 판단 근거를 함께 저장한다.
 - Propagation engine: anchor 주변의 caller/callee evidence를 전파한다.
 - Ref-backpropagation engine: 이미 매핑된 이웃에서 ambiguous node로 증거를 역전파한다.
 - Conflict resolver: one-to-one 충돌, family-level 충돌, graph inconsistency를 감지한다.
-- Local LLM analyst: ambiguous/custom-suspected 함수에 대해 feature와 코드 문맥을 요약하고 custom 여부 판단 근거를 제안한다.
+- MCP analyst interface: ambiguous/custom-suspected 함수에 대해 deferred case를 조회하고 force anchor를 주입해 propagation을 재실행한다.
 - Mapping exporter: 최종 mapping과 intermediate trace를 JSON으로 저장한다.
 
 ## 5. Scoring Sketch
@@ -75,7 +75,7 @@ final_score =
 
 `retrieval_prior`는 `lua_function_embedding`에서 계산된 score를 그대로 사용한다. 이 Agent는 retrieval scoring 자체를 다시 정의하지 않는다.
 
-Graph score는 최적화에 의한 inline 변화와 커스텀 function call 추가 가능성을 고려해 conservative하게 적용한다. Missing edge는 강한 penalty로 바로 처리하지 않고, reference graph에 없는 extra edge도 즉시 reject하지 않는다. Extra edge는 `custom_suspected` signal 또는 Local LLM analyst layer의 입력 근거로 사용할 수 있다.
+Graph score는 최적화에 의한 inline 변화와 커스텀 function call 추가 가능성을 고려해 conservative하게 적용한다. Missing edge는 강한 penalty로 바로 처리하지 않고, reference graph에 없는 extra edge도 즉시 reject하지 않는다. Extra edge는 `custom_suspected` signal 또는 analyst가 추가 검토할 근거로 사용할 수 있다.
 
 Reference call graph는 embedding하지 않는다. Call graph는 의미 유사도 검색 대상이 아니라 `src -> dst` 관계를 정확히 조회하고 비교해야 하는 구조화 데이터이므로 SQLite edge-list로 관리한다. 자세한 저장 설계는 [callgraph_store_design.md](callgraph_store_design.md)를 따른다.
 

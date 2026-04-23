@@ -1,11 +1,13 @@
 {
-  "pipeline_name": "lua_name_mapping_pipeline",
-  "description": "Minimal example config. Unspecified runtime paths are filled automatically by the pipeline.",
+  "pipeline_name": "runtime_recommended_binary",
+  "description": "Recommended default config for binary input. Only change the target binary and target metadata.",
   "paths": {
-    "session_name": "example_session",
+    "session_name": "recommended_binary_run",
     "target_binary": "data/runtime/input/example_target.so",
     "target_lua_version": "Lua_547",
-    "target_architecture": "x86_64"
+    "target_architecture": "x86_64",
+    "target_opt_level": "O0",
+    "target_strip_mode": "nostrip"
   },
   "steps": {
     "extract_query_features": {
@@ -13,8 +15,8 @@
     },
     "bulk_retrieval": {
       "enabled": true,
-      "candidate_pool": 200,
-      "topk": 50,
+      "candidate_pool": 100,
+      "topk": 20,
       "scoring_mode": "bonus_v2",
       "mode": "runtime_query"
     },

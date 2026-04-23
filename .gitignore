@@ -25,6 +25,8 @@ data/inputs/retrieval_results/**
 data/inputs/callgraphs/**
 !data/inputs/callgraphs/
 !data/inputs/callgraphs/.gitkeep
+!data/inputs/callgraphs/*/
+!data/inputs/callgraphs/*/.gitkeep
 
 data/inputs/binaries/**
 !data/inputs/binaries/
@@ -37,6 +39,8 @@ data/inputs/query_features/**
 data/inputs/reference_features/**
 !data/inputs/reference_features/
 !data/inputs/reference_features/.gitkeep
+!data/inputs/reference_features/*/
+!data/inputs/reference_features/*/.gitkeep
 
 data/outputs/mappings/**
 !data/outputs/mappings/
@@ -74,6 +78,10 @@ data/runtime/**
 data/inputs/retrieval_indexes/**
 !data/inputs/retrieval_indexes/
 !data/inputs/retrieval_indexes/.gitkeep
+!data/inputs/retrieval_indexes/*/
+!data/inputs/retrieval_indexes/*/.gitkeep
+!data/inputs/retrieval_indexes/*/*/
+!data/inputs/retrieval_indexes/*/*/.gitkeep
 
 # Local databases / large artifacts
 *.sqlite3

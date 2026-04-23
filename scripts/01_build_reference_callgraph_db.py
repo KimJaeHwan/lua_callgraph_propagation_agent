@@ -6,7 +6,7 @@ Input:
   data/inputs/reference_features/
 
 Output:
-  data/inputs/callgraphs/reference_callgraph.sqlite
+  data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite
 
 Typical commands from the lua_callgraph_propagation_agent project root:
 
@@ -19,7 +19,7 @@ Typical commands from the lua_callgraph_propagation_agent project root:
   # Build with explicit paths.
   python3 scripts/01_build_reference_callgraph_db.py \
     --input-root data/inputs/reference_features \
-    --output-db data/inputs/callgraphs/reference_callgraph.sqlite \
+    --output-db data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite \
     --replace
 
 Design notes:
@@ -43,7 +43,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_ROOT = (PROJECT_ROOT / "data" / "inputs" / "reference_features").resolve()
-DEFAULT_OUTPUT_DB = PROJECT_ROOT / "data" / "inputs" / "callgraphs" / "reference_callgraph.sqlite"
 SCHEMA_VERSION = "0.1"
 
 
@@ -67,10 +66,15 @@ def parse_args() -> argparse.Namespace:
         help="root directory containing vanilla feature JSON files",
     )
     parser.add_argument(
+        "--lua-version",
+        default="Lua_547",
+        help="default Lua version name used when --output-db is omitted (for example: Lua_547, Lua_536, Lua_524)",
+    )
+    parser.add_argument(
         "--output-db",
         type=Path,
-        default=DEFAULT_OUTPUT_DB,
-        help="SQLite DB output path",
+        default=None,
+        help="SQLite DB output path. Defaults to data/inputs/callgraphs/<lua-version>/reference_callgraph.sqlite",
     )
     parser.add_argument(
         "--replace",
@@ -363,7 +367,18 @@ def list_files(input_root: Path) -> None:
 def main() -> None:
     args = parse_args()
     input_root = args.input_root.resolve()
-    output_db = args.output_db.resolve()
+    output_db = (
+        args.output_db.resolve()
+        if args.output_db is not None
+        else (
+            PROJECT_ROOT
+            / "data"
+            / "inputs"
+            / "callgraphs"
+            / args.lua_version
+            / "reference_callgraph.sqlite"
+        ).resolve()
+    )
 
     if not input_root.exists():
         print(f"[ERROR] input root does not exist: {input_root}")

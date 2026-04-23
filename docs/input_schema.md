@@ -415,7 +415,7 @@ Agent 실행 결과다.
   "inputs": {
     "retrieval": "data/inputs/retrieval_results/retrieval_topk.json",
     "query_callgraph": "data/inputs/callgraphs/query_callgraph.json",
-    "reference_callgraph": "data/inputs/callgraphs/reference_callgraph.json",
+    "reference_callgraph": "data/inputs/callgraphs/Lua_547/reference_callgraph.json",
     "anchor_mapping": "data/inputs/anchor_mapping.json"
   },
   "results": [

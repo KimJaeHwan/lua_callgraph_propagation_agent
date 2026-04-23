@@ -6,10 +6,9 @@
 - query binary 또는 pre-extracted feature 입력
 - hybrid retrieval top-k 생성
 - callgraph 기반 seed anchor 선택
-- propagation / conflict / deferred 분류
+- iterative propagation / conflict / deferred 분류
 - deferred 분석 payload 생성
-- optional local LLM analyst 연결
-- FastMCP 서버로 tool interface 제공
+- FastMCP 서버로 analyst 개입용 tool interface 제공
 
 연구 단계에서 쓰였던 sibling repository는 여전히 데이터 생성 이력으로 남아 있지만, 실제 운용 경로는 이 레포 안에 복사된 runtime asset을 기준으로 정리한다.
 
@@ -24,7 +23,8 @@
 핵심 입력 위치:
 
 - reference features: `data/inputs/reference_features/`
-- runtime retrieval index 기본값: `data/inputs/retrieval_indexes/lua547_x86_runtime`
+- versioned reference DB: `data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite`
+- versioned runtime retrieval index: `data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime`
 - sample binaries: `data/runtime/input/`
 - optional pre-extracted query feature: `data/inputs/query_features/`
 
@@ -44,8 +44,10 @@
 
 기본 실행은 이 레포 안에 복사된 full retrieval index를 사용한다.
 
-- 기본 index: `data/inputs/retrieval_indexes/lua547_x86_runtime`
+- 현재 기본 index: `data/inputs/retrieval_indexes/Lua_547/x86_64/runtime`
+- 현재 기본 reference DB: `data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite`
 - 즉, 파이프라인 실행 시 sibling repository 경로를 직접 참조하지 않아도 된다.
+- 이후 Lua 5.3/5.2가 들어오면 같은 규칙으로 `Lua_536`, `Lua_524` 디렉터리를 추가하면 된다.
 
 ## 검증된 실행 경로
 
@@ -105,21 +107,12 @@ binary에서 바로 feature를 뽑는 설정도 포함되어 있다.
 - `pipeline_run`
 - `extract_query_features`
 - `bulk_query_retrieval`
-- `run_local_llm_analyst`
+- `list_deferred_cases`
+- `register_force_anchor`
 - `read_final_report`
 - `read_mapping_record`
 
 FastMCP 클라이언트 기준으로 `bulk_query_retrieval`, `read_final_report`, `read_mapping_record`, 그리고 실제 binary extraction을 포함한 `pipeline_run` 경로까지 점검했다.
-
-## Local LLM
-
-Local LLM은 기본 경로가 아니라 optional analyst layer다.
-
-- deterministic retrieval + graph scoring만으로 확정 가능한 함수는 자동 accept
-- 애매한 함수만 deferred/conflict로 분리
-- 그 뒤에만 `scripts/06_run_local_llm_analyst.py`를 붙인다
-
-즉, 이 프로젝트의 기본 철학은 “LLM이 최종 판정자가 아니라, 애매한 함수만 도와주는 reviewer”에 가깝다.
 
 ## Retrieval Index 정책
 
@@ -137,3 +130,4 @@ Local LLM은 기본 경로가 아니라 optional analyst layer다.
 - [docs/callgraph_store_design.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/callgraph_store_design.md)
 - [docs/mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
 - [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
+- [docs/runtime_validation_and_configs.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/runtime_validation_and_configs.md)

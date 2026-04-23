@@ -5,7 +5,7 @@
     "retrieval": "data/eval/fixtures/retrieval_topk_minimal.json",
     "query_graph": "data/eval/fixtures/query_callgraph_minimal.json",
     "anchors": "data/eval/fixtures/anchor_mapping_minimal.json",
-    "reference_db": "data/inputs/callgraphs/reference_callgraph.sqlite"
+    "reference_db": "data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite"
   },
   "scoring": {
     "primary_opt": "O0",
