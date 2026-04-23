@@ -78,9 +78,9 @@
 예를 들어:
 
 - config:
-  [runtime_lua547_x86_demo_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_demo_preextracted.json)
+  [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
 - output:
-  `data/runtime/results/lua547_x86_demo_preextracted/`
+  `data/runtime/results/recommended_preextracted_run/`
 
 즉 `configs`는 "어떻게 실행할지"를 저장하는 곳이고,
 `runtime/results`는 "실행 결과가 무엇이었는지"를 저장하는 곳이다.
@@ -123,41 +123,16 @@ data/inputs/retrieval_indexes/Lua_536/x86_64/runtime/
 data/inputs/retrieval_indexes/Lua_524/x86_64/runtime/
 ```
 
-## 4. Current Config Classification
+## 4. Current Config Policy
 
-현재 `data/configs/` 아래 파일들은 아래처럼 보면 된다.
+현재 Git에 포함되는 공식 config는 두 개만 유지한다.
 
-### Base Example
+- [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
+  - 가장 빠르게 구조와 실행 흐름을 확인하는 기본 진입점
+- [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
+  - 실제 binary extraction을 포함하는 기본 진입점
 
-- [name_mapping_pipeline.example.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/name_mapping_pipeline.example.json)
-  - 새 runtime config를 만들 때 참고하는 템플릿 성격
-
-### Main Runtime Paths
-
-- [runtime_lua547_x86_demo.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_demo.json)
-  - binary extraction부터 시작하는 기본 demo
-- [runtime_lua547_x86_demo_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_demo_preextracted.json)
-  - pre-extracted query feature로 빠르게 재현하는 기본 demo
-- [runtime_lua547_x86_processed_binary_0000.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_processed_binary_0000.json)
-  - 실제 processed binary 대상 smoke/integration config
-
-### Small Debug / Behavior Fixtures
-
-- [runtime_lua547_x86_single_deregister_tm_clones.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_single_deregister_tm_clones.json)
-  - 단일 함수 retrieval / report 조회 확인용
-- [runtime_lua547_x86_three_function_anchor_demo.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_three_function_anchor_demo.json)
-  - propagation / visible anchor 동작 확인용
-
-### Lua Function Evaluation Fixtures
-
-- [runtime_lua547_x86_lua_core_anchor_demo.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_lua_core_anchor_demo.json)
-  - 실제 Lua core 함수 묶음, visible-name anchor 포함
-- [runtime_lua547_x86_lua_core_anchor_demo_masked.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_lua_core_anchor_demo_masked.json)
-  - 위 core 함수 묶음의 masked 버전
-- [runtime_lua547_x86_lua_internal_demo_masked.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_lua_internal_demo_masked.json)
-  - 내부 Lua engine 함수 묶음의 masked 버전
-- [runtime_external_strip_0000_eval_subset.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_external_strip_0000_eval_subset.json)
-  - 외부 stripped binary subset을 nostrip ground truth와 비교하는 실측 검증 config
+그 외 실험/평가/디버깅용 config는 로컬 재현용 자산으로 취급하고 Git에는 포함하지 않는다.
 
 ## 5. Practical Rule
 

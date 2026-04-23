@@ -12,12 +12,12 @@ Typical commands:
 
   # Show the exact commands that would run.
   python3 scripts/10_run_name_mapping_pipeline.py \
-    --config data/configs/name_mapping_pipeline.example.json \
+    --config data/configs/runtime_recommended_preextracted.json \
     --dry-run
 
   # Execute all enabled internal steps.
   python3 scripts/10_run_name_mapping_pipeline.py \
-    --config data/configs/name_mapping_pipeline.example.json
+    --config data/configs/runtime_recommended_preextracted.json
 
 Notes:
   - This runner centralizes the workflow inside lua_callgraph_propagation_agent.
@@ -36,7 +36,7 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CONFIG = PROJECT_ROOT / "data" / "configs" / "name_mapping_pipeline.example.json"
+DEFAULT_CONFIG = PROJECT_ROOT / "data" / "configs" / "runtime_recommended_preextracted.json"
 
 
 def parse_args() -> argparse.Namespace:

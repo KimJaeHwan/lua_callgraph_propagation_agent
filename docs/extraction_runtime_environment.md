@@ -127,9 +127,7 @@ cd lua_callgraph_propagation_agent
 
 ### 2. MCP -> pipeline_run -> 실제 binary
 
-실제 binary config:
-
-- [runtime_lua547_x86_processed_binary_0000.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_lua547_x86_processed_binary_0000.json)
+실제 binary 실행은 현재 공개된 추천 config [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json) 또는 이에 준하는 로컬 smoke config로 수행한다.
 
 대상 binary:
 

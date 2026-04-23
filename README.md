@@ -55,16 +55,16 @@
 
 ```bash
 ../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_lua547_x86_demo_preextracted.json \
+  --config data/configs/runtime_recommended_preextracted.json \
   --stop-on-error
 ```
 
 이 실행은 실제로 완료되었고, 결과는 다음 위치에 생성된다.
 
-- retrieval: `data/runtime/results/lua547_x86_demo_preextracted/retrieval_result.json`
-- propagation: `data/runtime/results/lua547_x86_demo_preextracted/propagation_result.json`
-- deferred analysis: `data/runtime/results/lua547_x86_demo_preextracted/deferred_analysis.json`
-- final report: `data/runtime/results/lua547_x86_demo_preextracted/final_mapping_report.json`
+- retrieval: `data/runtime/results/recommended_preextracted_run/retrieval_result.json`
+- propagation: `data/runtime/results/recommended_preextracted_run/propagation_result.json`
+- deferred analysis: `data/runtime/results/recommended_preextracted_run/deferred_analysis.json`
+- final report: `data/runtime/results/recommended_preextracted_run/final_mapping_report.json`
 
 샘플 실행 결과 요약:
 
@@ -79,7 +79,7 @@ binary에서 바로 feature를 뽑는 설정도 포함되어 있다.
 
 ```bash
 ../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_lua547_x86_demo.json \
+  --config data/configs/runtime_recommended_binary.json \
   --stop-on-error
 ```
 
@@ -90,6 +90,13 @@ binary에서 바로 feature를 뽑는 설정도 포함되어 있다.
 - [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
 
 다만 대규모 real-binary case는 extraction 이후 retrieval / propagation이 오래 걸릴 수 있으므로, 현재는 pre-extracted config가 가장 빠른 검증 경로다.
+
+현재 Git에 포함되는 공식 config는 아래 두 개만 유지한다.
+
+- [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
+- [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
+
+그 외 실험/평가용 config는 로컬 재현용으로만 유지하고 Git에는 올리지 않는다.
 
 ## FastMCP
 
@@ -131,4 +138,5 @@ FastMCP 클라이언트 기준으로 `bulk_query_retrieval`, `read_final_report`
 - [docs/mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
 - [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
 - [docs/runtime_validation_and_configs.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/runtime_validation_and_configs.md)
+- [docs/config_field_reference.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/config_field_reference.md)
 - [docs/release_assets.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/release_assets.md)

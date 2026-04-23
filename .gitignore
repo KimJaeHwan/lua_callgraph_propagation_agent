@@ -15,8 +15,10 @@ venv/
 env/
 .ipynb_checkpoints/
 
-# Generated data artifacts
-data/configs/*_mcp_test.json
+# Configs
+data/configs/*.json
+!data/configs/runtime_recommended_binary.json
+!data/configs/runtime_recommended_preextracted.json
 
 data/inputs/retrieval_results/**
 !data/inputs/retrieval_results/
