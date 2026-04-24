@@ -11,37 +11,51 @@ from fastmcp import FastMCP
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _default_runtime_paths(paths: dict) -> dict[str, Any]:
-    """Mirror of default_runtime_paths() in scripts/10_run_name_mapping_pipeline.py.
-    Fills in conventional output paths from session_name / lua_version / architecture
-    so that configs only need to specify the fields that differ from convention.
+def _default_runtime_paths(config: dict) -> dict[str, Any]:
+    """Compute conventional output paths from a pipeline config.
+
+    Supports both config formats:
+      - New format: session_name / analysis.lua_version / analysis.architecture at top level
+      - Legacy format: paths.session_name / paths.target_lua_version / paths.target_architecture
     """
-    session = paths.get("session_name", "runtime_session")
-    lua_version = paths.get("target_lua_version") or "Lua_547"
-    architecture = paths.get("target_architecture") or "x86_64"
+    # New format: session_name + analysis section at top level
+    if "session_name" in config or "analysis" in config or "extraction" in config:
+        session      = config.get("session_name", "runtime_session")
+        analysis     = config.get("analysis", {})
+        lua_version  = analysis.get("lua_version") or "Lua_547"
+        architecture = analysis.get("architecture") or "x86_64"
+        extra: dict  = {}  # new format has no extra path overrides section
+    else:
+        # Legacy format: paths dict nested inside config
+        paths_dict   = config.get("paths", config)
+        session      = paths_dict.get("session_name", "runtime_session")
+        lua_version  = paths_dict.get("target_lua_version") or "Lua_547"
+        architecture = paths_dict.get("target_architecture") or "x86_64"
+        extra        = paths_dict
+
     normalized_arch = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
     result_root = f"data/runtime/results/{session}"
-    query_root = f"data/runtime/query_features/{session}"
+    query_root  = f"data/runtime/query_features/{session}"
 
     defaults: dict[str, Any] = {
-        "session_name": session,
-        "target_lua_version": lua_version,
-        "target_architecture": architecture,
-        "extract_manifest_json": f"{query_root}/extract_manifest.json",
-        "query_feature_json": "",
-        "retrieval_index": f"data/inputs/retrieval_indexes/{lua_version}/{normalized_arch}/runtime",
-        "retrieval_output_json": f"{result_root}/retrieval_result.json",
-        "seed_anchor_json": f"{result_root}/seed_anchors.json",
-        "runtime_suite_json": f"{result_root}/runtime_propagation_suite.json",
-        "reference_db": f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
+        "session_name":           session,
+        "target_lua_version":     lua_version,
+        "target_architecture":    architecture,
+        "extract_manifest_json":  f"{query_root}/extract_manifest.json",
+        "query_feature_json":     "",
+        "retrieval_index":        f"data/inputs/retrieval_indexes/{lua_version}/{normalized_arch}/runtime",
+        "retrieval_output_json":  f"{result_root}/retrieval_result.json",
+        "seed_anchor_json":       f"{result_root}/seed_anchors.json",
+        "runtime_suite_json":     f"{result_root}/runtime_propagation_suite.json",
+        "reference_db":           f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
         "embedding_project_root": ".",
-        "propagation_output_json": f"{result_root}/propagation_result.json",
-        "deferred_output_json": f"{result_root}/deferred_analysis.json",
-        "final_report_json": f"{result_root}/final_mapping_report.json",
+        "propagation_output_json":f"{result_root}/propagation_result.json",
+        "deferred_output_json":   f"{result_root}/deferred_analysis.json",
+        "final_report_json":      f"{result_root}/final_mapping_report.json",
     }
 
     merged = defaults.copy()
-    for key, value in paths.items():
+    for key, value in extra.items():
         if value not in (None, ""):
             merged[key] = value
     return merged
@@ -383,7 +397,7 @@ def register_force_anchor(
     reason: str,
 ) -> dict[str, Any]:
     config = _load_json(_resolve_path(config_path))
-    paths = _default_runtime_paths(config.get("paths", {}))
+    paths = _default_runtime_paths(config)
 
     anchor_path = _resolve_path(paths["seed_anchor_json"])
     if not anchor_path.exists():
@@ -439,7 +453,7 @@ def batch_register_force_anchors(
 ) -> dict[str, Any]:
     """anchors 형식: [{"query_func": "sub_401234", "reference_func": "luaD_precall", "reason": "..."}]"""
     config = _load_json(_resolve_path(config_path))
-    paths = _default_runtime_paths(config.get("paths", {}))
+    paths = _default_runtime_paths(config)
 
     anchor_path = _resolve_path(paths["seed_anchor_json"])
     if not anchor_path.exists():
@@ -502,7 +516,7 @@ def batch_register_force_anchors(
 )
 def run_downstream(config_path: str) -> dict[str, Any]:
     config = _load_json(_resolve_path(config_path))
-    paths = _default_runtime_paths(config.get("paths", {}))
+    paths = _default_runtime_paths(config)
 
     anchor_path = _resolve_path(paths["seed_anchor_json"])
     if not anchor_path.exists():
@@ -530,7 +544,7 @@ def run_downstream(config_path: str) -> dict[str, Any]:
 )
 def read_propagation_summary(config_path: str) -> dict[str, Any]:
     config = _load_json(_resolve_path(config_path))
-    paths = _default_runtime_paths(config.get("paths", {}))
+    paths = _default_runtime_paths(config)
 
     propagation_path = _resolve_path(paths["propagation_output_json"])
     if not propagation_path.exists():
