@@ -252,21 +252,25 @@ def main() -> None:
     if args.list_only:
         cmd.append("--list-only")
 
-    completed = subprocess.run(
+    # stdout을 실시간 스트리밍 — tqdm 진행바가 즉시 보임
+    proc = subprocess.Popen(
         cmd,
         cwd=work_dir,
-        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         encoding="utf-8",
         errors="replace",
-        capture_output=True,
         env=env,
     )
-
-    print(completed.stdout.rstrip())
-    if completed.returncode != 0:
-        if completed.stderr:
-            print(completed.stderr.rstrip(), file=sys.stderr)
-        raise SystemExit(completed.returncode)
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+    proc.wait()
+    if proc.returncode != 0:
+        for line in proc.stderr:
+            print(line, end="", flush=True, file=sys.stderr)
+        raise SystemExit(proc.returncode)
 
     if args.list_only:
         return

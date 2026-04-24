@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tqdm import tqdm
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RETRIEVAL_SCRIPT = (
@@ -87,10 +89,10 @@ def main() -> None:
         raise SystemExit(f"Expected list in query JSON: {args.query_json}")
 
     cases = []
-    for row in rows:
+    valid_rows = [r for r in rows if r.get("function_name")]
+    print(f"[INFO] running retrieval for {len(valid_rows)} functions...")
+    for row in tqdm(valid_rows, desc="  retrieval", unit="func", ncols=72):
         query_func = row.get("function_name")
-        if not query_func:
-            continue
 
         query = module.build_query_record_from_file(query_json.resolve(), query_func)
         raw_results = module.search_index(
@@ -137,7 +139,6 @@ def main() -> None:
                 ],
             }
         )
-        print(f"[OK] retrieval: {case_id} -> {len(unique_results[:args.topk])} unique candidates")
 
     result = {
         "suite_name": "runtime_bulk_query_retrieval",
