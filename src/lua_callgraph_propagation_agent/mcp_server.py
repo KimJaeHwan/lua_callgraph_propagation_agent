@@ -286,6 +286,85 @@ def _save_json(path: Path, data: dict[str, Any]) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _deferred_top_candidates(config: dict) -> str:
+    """새 포맷(analysis.deferred_analysis) 또는 구 포맷(steps.deferred_analysis) 모두 지원."""
+    v = (
+        config.get("analysis", {}).get("deferred_analysis", {}).get("top_candidates")
+        or config.get("steps", {}).get("deferred_analysis", {}).get("top_candidates")
+        or 5
+    )
+    return str(v)
+
+
+def _run_downstream_steps(
+    *,
+    config: dict,
+    paths: dict[str, Any],
+) -> tuple[bool, list[dict[str, Any]]]:
+    """build_suite → propagation → deferred_analysis → final_report 를 순서대로 실행.
+
+    Returns (all_ok, steps) 튜플.  retrieval / seed_selection 은 건드리지 않으므로
+    force anchor 를 직접 편집한 뒤 호출해도 anchor 가 덮어써지지 않는다.
+    """
+    steps: list[dict[str, Any]] = []
+
+    def run(name: str, cmd: list[str]) -> bool:
+        result = _run_command(cmd)
+        result["step"] = name
+        steps.append(result)
+        return result["ok"]
+
+    anchor_path      = _resolve_path(paths["seed_anchor_json"])
+    suite_json       = _resolve_path(paths["runtime_suite_json"])
+    propagation_json = _resolve_path(paths["propagation_output_json"])
+    deferred_json    = _resolve_path(paths["deferred_output_json"])
+    final_json       = _resolve_path(paths["final_report_json"])
+    reference_db     = _resolve_path(paths["reference_db"])
+    embedding_root   = _resolve_path(paths.get("embedding_project_root", "."))
+    retrieval_json   = _resolve_path(paths["retrieval_output_json"])
+    session_name     = paths["session_name"]
+    top_candidates   = _deferred_top_candidates(config)
+
+    if not run("build_runtime_suite", [
+        sys.executable, "scripts/14_build_runtime_propagation_suite.py",
+        "--retrieval-json", str(retrieval_json),
+        "--anchor-json", str(anchor_path),
+        "--reference-db", str(reference_db),
+        "--output-json", str(suite_json),
+        "--embedding-project-root", str(embedding_root),
+        "--propagation-output-json", str(propagation_json),
+    ]):
+        return False, steps
+
+    if not run("propagation", [
+        sys.executable, "scripts/04_propagate_from_anchors.py",
+        "--suite", str(suite_json),
+        "--output-json", str(propagation_json),
+        "--iterative",
+    ]):
+        return False, steps
+
+    if not run("deferred_analysis", [
+        sys.executable, "scripts/05_build_deferred_analysis.py",
+        "--input-json", str(propagation_json),
+        "--embedding-root", str(embedding_root),
+        "--output-json", str(deferred_json),
+        "--top-candidates", top_candidates,
+    ]):
+        return False, steps
+
+    if not run("final_report", [
+        sys.executable, "scripts/15_export_final_mapping_report.py",
+        "--propagation-json", str(propagation_json),
+        "--deferred-json", str(deferred_json),
+        "--output-json", str(final_json),
+        "--session-name", session_name,
+    ]):
+        return False, steps
+
+    return True, steps
+
+
 @mcp.tool(
     description=(
         "Force-register a manually confirmed mapping as a seed anchor after decompile analysis, "
@@ -293,7 +372,8 @@ def _save_json(path: Path, data: dict[str, Any]) -> None:
         "Use this when decompiled code analysis reveals a confident answer for a deferred case. "
         "query_func is the stripped function name (e.g. sub_401234), "
         "reference_func is the confirmed Lua function name (e.g. luaD_precall), "
-        "reason should summarize the decompile evidence used to make this decision."
+        "reason should summarize the decompile evidence used to make this decision. "
+        "To register multiple anchors at once use batch_register_force_anchors instead."
     )
 )
 def register_force_anchor(
@@ -311,7 +391,6 @@ def register_force_anchor(
 
     anchor_data = _load_json(anchor_path)
 
-    # 중복 등록 방지
     for mapping in anchor_data.get("mappings", []):
         if mapping.get("query_function_name") == query_func:
             return {
@@ -329,73 +408,158 @@ def register_force_anchor(
     })
     _save_json(anchor_path, anchor_data)
 
-    # build_runtime_suite → propagation (iterative) → deferred_analysis → final_report 재실행
-    steps: list[dict[str, Any]] = []
-
-    def run(name: str, cmd: list[str]) -> bool:
-        result = _run_command(cmd)
-        result["step"] = name
-        steps.append(result)
-        return result["ok"]
-
-    suite_json = _resolve_path(paths["runtime_suite_json"])
-    propagation_json = _resolve_path(paths["propagation_output_json"])
-    deferred_json = _resolve_path(paths["deferred_output_json"])
-    final_json = _resolve_path(paths["final_report_json"])
-    reference_db = _resolve_path(paths["reference_db"])
-    embedding_root = _resolve_path(paths.get("embedding_project_root", "."))
-    retrieval_json = _resolve_path(paths["retrieval_output_json"])
-    session_name = paths["session_name"]
-    deferred_top_candidates = str(config.get("steps", {}).get("deferred_analysis", {}).get("top_candidates", 5))
-
-    if not run("build_runtime_suite", [
-        sys.executable, "scripts/14_build_runtime_propagation_suite.py",
-        "--retrieval-json", str(retrieval_json),
-        "--anchor-json", str(anchor_path),
-        "--reference-db", str(reference_db),
-        "--output-json", str(suite_json),
-        "--embedding-project-root", str(embedding_root),
-        "--propagation-output-json", str(propagation_json),
-    ]):
+    ok, steps = _run_downstream_steps(config=config, paths=paths)
+    if not ok:
         return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
 
-    if not run("propagation", [
-        sys.executable, "scripts/04_propagate_from_anchors.py",
-        "--suite", str(suite_json),
-        "--output-json", str(propagation_json),
-        "--iterative",
-    ]):
-        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
-
-    if not run("deferred_analysis", [
-        sys.executable, "scripts/05_build_deferred_analysis.py",
-        "--input-json", str(propagation_json),
-        "--embedding-root", str(embedding_root),
-        "--output-json", str(deferred_json),
-        "--top-candidates", deferred_top_candidates,
-    ]):
-        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
-
-    if not run("final_report", [
-        sys.executable, "scripts/15_export_final_mapping_report.py",
-        "--propagation-json", str(propagation_json),
-        "--deferred-json", str(deferred_json),
-        "--output-json", str(final_json),
-        "--session-name", session_name,
-    ]):
-        return {"ok": False, "registered_anchor": f"{query_func} → {reference_func}", "steps": steps}
-
-    # 재실행 후 결과 요약
-    updated_report = _load_json(final_json)
-    summary = updated_report.get("summary", {})
-
+    updated_report = _load_json(_resolve_path(paths["final_report_json"]))
     return {
         "ok": True,
         "registered_anchor": f"{query_func} → {reference_func}",
         "reason": reason,
-        "updated_summary": summary,
-        "report_json": str(final_json),
+        "updated_summary": updated_report.get("summary", {}),
+        "report_json": str(_resolve_path(paths["final_report_json"])),
         "steps": [{"step": s["step"], "ok": s["ok"], "returncode": s["returncode"]} for s in steps],
+    }
+
+
+@mcp.tool(
+    description=(
+        "Register multiple manually confirmed force anchors at once, then re-run "
+        "build_suite → propagation → deferred_analysis → final_report exactly ONCE. "
+        "Much more efficient than calling register_force_anchor N times when you have "
+        "several deferred/conflict cases resolved in one IDA analysis session. "
+        "anchors is a list of {query_func, reference_func, reason} dicts. "
+        "Duplicates (query_func already registered) are silently skipped."
+    )
+)
+def batch_register_force_anchors(
+    config_path: str,
+    anchors: list[dict[str, str]],
+) -> dict[str, Any]:
+    """anchors 형식: [{"query_func": "sub_401234", "reference_func": "luaD_precall", "reason": "..."}]"""
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config.get("paths", {}))
+
+    anchor_path = _resolve_path(paths["seed_anchor_json"])
+    if not anchor_path.exists():
+        return {"ok": False, "error": f"seed_anchor_json not found: {anchor_path}"}
+
+    anchor_data = _load_json(anchor_path)
+    existing = {m["query_function_name"] for m in anchor_data.get("mappings", [])}
+
+    registered: list[str] = []
+    skipped: list[str] = []
+
+    for entry in anchors:
+        qf  = entry.get("query_func", "").strip()
+        rf  = entry.get("reference_func", "").strip()
+        rsn = entry.get("reason", "batch_force_anchor").strip()
+        if not qf or not rf:
+            continue
+        if qf in existing:
+            skipped.append(qf)
+            continue
+        anchor_data.setdefault("mappings", []).append({
+            "query_function_name": qf,
+            "reference_function_name": rf,
+            "confidence": 1.0,
+            "source": "force_anchor",
+            "status": "accepted",
+            "evidence": [f"force_registered_by_llm_decompile_analysis: {rsn}"],
+        })
+        existing.add(qf)
+        registered.append(f"{qf} → {rf}")
+
+    if not registered:
+        return {"ok": True, "registered": [], "skipped": skipped, "note": "nothing new to register"}
+
+    _save_json(anchor_path, anchor_data)
+
+    ok, steps = _run_downstream_steps(config=config, paths=paths)
+    if not ok:
+        return {"ok": False, "registered": registered, "skipped": skipped, "steps": steps}
+
+    updated_report = _load_json(_resolve_path(paths["final_report_json"]))
+    return {
+        "ok": True,
+        "registered": registered,
+        "skipped": skipped,
+        "updated_summary": updated_report.get("summary", {}),
+        "report_json": str(_resolve_path(paths["final_report_json"])),
+        "steps": [{"step": s["step"], "ok": s["ok"], "returncode": s["returncode"]} for s in steps],
+    }
+
+
+@mcp.tool(
+    description=(
+        "Re-run only the downstream steps (build_suite → propagation → deferred_analysis → final_report) "
+        "without touching retrieval or seed_selection. "
+        "Use this after manually editing seed_anchors.json, or after batch_register_force_anchors "
+        "if you want a fresh run without re-registering anchors. "
+        "Critically: does NOT overwrite seed_anchors.json, so force anchors are preserved."
+    )
+)
+def run_downstream(config_path: str) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config.get("paths", {}))
+
+    anchor_path = _resolve_path(paths["seed_anchor_json"])
+    if not anchor_path.exists():
+        return {"ok": False, "error": f"seed_anchor_json not found: {anchor_path}"}
+
+    ok, steps = _run_downstream_steps(config=config, paths=paths)
+    if not ok:
+        return {"ok": False, "steps": steps}
+
+    updated_report = _load_json(_resolve_path(paths["final_report_json"]))
+    return {
+        "ok": True,
+        "updated_summary": updated_report.get("summary", {}),
+        "report_json": str(_resolve_path(paths["final_report_json"])),
+        "steps": [{"step": s["step"], "ok": s["ok"], "returncode": s["returncode"]} for s in steps],
+    }
+
+
+@mcp.tool(
+    description=(
+        "Read a quick summary of the propagation result: accepted/deferred/conflict counts "
+        "plus the full deferred and conflict case lists with their top predictions and reasons. "
+        "Use this to check pipeline progress without reading the large final_mapping_report.json."
+    )
+)
+def read_propagation_summary(config_path: str) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config.get("paths", {}))
+
+    propagation_path = _resolve_path(paths["propagation_output_json"])
+    if not propagation_path.exists():
+        return {"ok": False, "error": f"propagation_output_json not found: {propagation_path}"}
+
+    data = _load_json(propagation_path)
+    results = data.get("results", [])
+
+    accepted  = [r for r in results if r.get("status") == "accepted"]
+    deferred  = [r for r in results if r.get("status") == "deferred"]
+    conflicts = [r for r in results if r.get("status") == "conflict"]
+
+    def compact(r: dict) -> dict:
+        return {
+            "case_id":   r.get("case_id"),
+            "query_func": r.get("query_func"),
+            "predicted": r.get("predicted_function_name"),
+            "reasons":   r.get("status_reasons", []),
+            "round":     r.get("propagation_round"),
+        }
+
+    return {
+        "ok": True,
+        "propagation_json": str(propagation_path),
+        "summary": data.get("summary", {}),
+        "round_log": data.get("round_log", []),
+        "deferred": [compact(r) for r in deferred],
+        "conflicts": [compact(r) for r in conflicts],
+        "accepted_count": len(accepted),
     }
 
 
