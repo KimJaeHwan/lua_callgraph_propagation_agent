@@ -141,5 +141,7 @@ python scripts/20_run_mcp_server.py
 - [docs/input_schema.md](docs/input_schema.md) — feature JSON 스키마
 - [docs/config_field_reference.md](docs/config_field_reference.md) — config 필드 레퍼런스
 - [docs/extraction_runtime_environment.md](docs/extraction_runtime_environment.md) — Ghidra 환경 설정
+- [docs/macos_mps_setup.md](docs/macos_mps_setup.md) — Apple Silicon MPS 전용 환경 구성
+- [docs/retrieval_performance_plan.md](docs/retrieval_performance_plan.md) — retrieval 성능 개선 측정/정리
 - [docs/callgraph_propagation_agent_design.md](docs/callgraph_propagation_agent_design.md) — 설계 문서
 - [docs/runtime_validation_and_configs.md](docs/runtime_validation_and_configs.md) — 검증 이력

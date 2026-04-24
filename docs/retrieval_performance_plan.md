@@ -1,150 +1,246 @@
-# Retrieval 성능 및 정확도 개선 계획
+# Retrieval 성능 개선 정리
 
-## 현황 (baseline)
+## 목적
 
-대상 바이너리: `libengine.so` (stripped, x86_64, ~8.5MB)  
-총 함수 수: 16,769개  
-측정 환경: Windows, CPU only (Intel/AMD)
+대형 stripped 바이너리에서도 retrieval 단계가 실무적으로 쓸 만한 시간 안에 끝나도록 줄이는 것이 목표다.
 
-| 단계 | 소요 시간 | 비고 |
-|------|-----------|------|
-| Batch 인코딩 (embedding) | ~6분 | bge-small-en-v1.5, CPU |
-| Retrieval 루프 | ~43분 | 16,769 × 100 candidates, Python 루프 |
-| **합계** | **~49분** | |
+이번 문서는 계획 초안이 아니라, 실제 측정과 반영 결과를 기준으로 정리한 현재 상태 문서다.
 
----
+## 측정 대상
 
-## 병목 분석
+- 대상 바이너리: `libengine.so`
+- query feature 수: `16,154`
+- 비교 index: `Lua_547/x86_64/runtime`
+- scoring mode: `bonus_v2`
+- candidate pool: `100`
+- topk: `20`
 
-### 1. Batch 인코딩
-`SentenceTransformer`가 device 지정 없이 CPU로만 실행됨.  
-GPU(CUDA/MPS)를 지원하는 라이브러리임에도 활용 못하는 상태.
+주의:
 
-### 2. Retrieval 루프 (주요 병목)
-`_score_candidates` 내부의 symbolic bonus 계산이 순수 Python set 연산:
+- 이 측정은 `Lua_536/aarch64` 레퍼런스 자산이 아직 없어서, 정확도 평가용이 아니라 retrieval 성능 비교용으로 수행했다.
+- 동일 query / 동일 index / 동일 옵션으로만 속도를 비교했다.
 
-```
-for i in candidate_ids (100개):
-    set(query_tokens) & set(candidate_tokens)  # Python loop
-```
+## 측정 결과
 
-16,769 함수 × 100 candidates = **167만 번 Python 반복**  
-Python 인터프리터 오버헤드 + GIL 점유로 병렬화도 불가.
+### 1. 원본 baseline
 
-### 3. candidate pool 크기 제약
-정확도를 높이려면 pool을 늘려야 하는데,  
-현재는 pool 크기에 비례해 Python 루프도 늘어나므로 늘리기 어려운 구조.
+환경:
 
----
+- Windows에서 관측한 retrieval loop: 약 `43분`
+- Mac에서 같은 규모를 임시 index로 재현한 baseline 총 시간: `855.18초` (`14분 15초`)
 
-## 개선 항목
+Mac baseline 세부:
 
-### Priority 1 — Symbolic bonus 벡터화
+| 단계 | 시간 |
+|------|------|
+| query encoding | 약 `1분 47초` |
+| retrieval loop | 약 `12분 06초` |
+| 합계 | `855.18초` |
 
-**방법**: token 존재 여부를 sparse matrix(함수 × token)로 표현 후 행렬곱으로 overlap 계산
+### 2. 1차 최적화 후
 
-```
-현재: for i in candidates: set(q) & set(c)  → 167만 Python 루프
-개선: query_sparse @ reference_sparse.T     → C/BLAS 행렬곱 1번
-```
+반영한 것:
 
-**효과**:
-- Retrieval 43분 → **2~3분** 예상
-- candidate pool 크기가 속도에 거의 영향을 주지 않게 됨
-- Mac/Windows 동일하게 적용 가능 (numpy/scipy 공통)
+- `sklearn cosine_similarity` 제거 후 `numpy matmul` 사용
+- symbolic token set 재계산 제거
+- `SymbolicProfile` 사전 계산
+- device 자동 감지 (`cuda -> mps -> cpu`)
 
-**연관 효과**: Priority 2 (candidate pool 확대)의 전제조건
+결과:
 
----
+| 단계 | 시간 |
+|------|------|
+| query encoding | 약 `1분 48초` |
+| retrieval loop | 약 `1분 58초` |
+| 합계 | `251.13초` |
 
-### Priority 2 — Candidate pool 확대 (정확도 향상)
+효과:
 
-**방법**: Priority 1 완료 후 `--candidate-pool` 100 → 500~1000으로 확대
+- 전체 약 `3.4배` 개선
+- retrieval loop만 보면 약 `6.1배` 개선
 
-**현재 딜레마**:
-```
-pool 크기  │  정확도  │  속도 (현재)
-─────────────────────────────────
-100        │  낮음    │  43분
-500        │  높음    │  ~3.5시간  ← 현실적으로 불가
-```
+### 3. FAISS 적용 후
 
-**벡터화 후**:
-```
-pool 크기  │  정확도  │  속도 (개선 후)
-────────────────────────────────────
-100        │  낮음    │  ~2분
-500        │  높음    │  ~2분      ← pool 크기가 속도에 무관
-1000       │  더 높음 │  ~2~3분
-```
+반영한 것:
 
-pool이 커질수록 진짜 정답이 후보에 포함될 확률이 높아지므로 직접적인 정확도 향상.
+- `semantic.faiss`가 없으면 `semantic.npy`로부터 자동 생성
+- 이후 semantic shortlist는 FAISS `IndexFlatIP` 경로 사용
 
----
+결과:
 
-### Priority 3 — GPU 가속 (embedding)
+| 단계 | 시간 |
+|------|------|
+| query encoding | 약 `1분 51초` |
+| retrieval loop | 약 `1분 20초` |
+| 합계 | `216.51초` |
 
-**방법**: `load_embedding_model`에 device 자동 감지 추가
+효과:
 
-```python
-# 감지 우선순위
-# 1. CUDA  (Windows/Linux GPU)
-# 2. MPS   (Mac M-series)
-# 3. CPU   (fallback)
-```
+- baseline 대비 전체 약 `3.95배` 개선
+- 1차 최적화 대비 추가 약 `1.16배` 개선
 
-**효과**:
-- Batch 인코딩 6분 → **30~40초** 예상 (10~15배)
-- Mac/Windows 크로스플랫폼 지원
+### 4. macOS MPS venv 재검증
 
----
+별도 Python 3.11 venv를 만들어 다시 측정했다.
 
-### Priority 4 — 멀티프로세싱 (Mac 우선)
+결과:
 
-**방법**: Retrieval 루프를 `ProcessPoolExecutor`로 함수 단위 병렬 처리
+| 단계 | 시간 |
+|------|------|
+| 합계 | `228.82초` |
 
-**Mac (fork)**:
-- index를 메모리 복사 없이 worker 간 공유 가능
-- 16 P-cores (M4 Max) 활용 시 추가 8~12배 가속 가능
-- 코드 변경 상대적으로 단순
+중요:
 
-**Windows (spawn)**:
-- worker마다 index pickle 직렬화 비용 발생
-- `multiprocessing.shared_memory`로 numpy 행렬 공유 필요
-- 코드 변경량 큼, 별도 구현 필요
+- 이번 실행 로그에서 embedding model은 실제로 `device=cpu`로 올라갔다.
+- 즉 이 값은 `MPS 가속 결과`가 아니라 `새 venv에서의 CPU+FAISS 재측정`이다.
 
----
+## 현재까지 실제로 효과가 검증된 항목
 
-## 개선 후 예상 성능
+### A. symbolic scoring 최적화
 
-### Windows (Priority 1~3 적용)
+기존 문제:
 
-| 단계 | 현재 | 개선 후 |
-|------|------|---------|
-| 인코딩 | 6분 | ~35초 |
-| Retrieval | 43분 | ~2~3분 |
-| **합계** | **~49분** | **~3~4분** |
+- candidate마다 `set(query_tokens)`, `set(candidate_tokens)`를 반복 생성
+- overlap 계산이 순수 Python 루프에 과도하게 의존
 
-### Mac M4 Max (Priority 1~4 전체 적용)
+개선:
 
-| 단계 | Windows 현재 | M4 Max 최적화 |
-|------|-------------|--------------|
-| 인코딩 | 6분 | ~15초 |
-| Retrieval | 43분 | ~30초 |
-| **합계** | **~49분** | **~1분 이내** |
+- `FunctionRecord`에 `symbolic_profile` 저장
+- offsets / compares / strings / callees 집합을 1회만 준비
+- scoring 시 재사용
 
-약 **15~20배** 차이 예상.
+효과:
 
----
+- retrieval loop의 주 병목 제거
 
-## 정확도 향상 요약
+### B. semantic / numeric similarity 계산 단순화
 
-| 개선 항목 | 정확도 영향 | 속도 영향 |
-|-----------|------------|---------|
-| Symbolic 벡터화 | 중립 (동일 알고리즘) | 대폭 향상 |
-| Pool 확대 (100→500) | **직접 향상** | 벡터화 후 중립 |
-| GPU 가속 | 중립 | 인코딩 향상 |
-| 멀티프로세싱 | 중립 | 루프 향상 |
+기존:
 
-핵심은 **벡터화가 pool 확대의 전제조건**이라는 점.  
-벡터화 없이 pool만 늘리면 속도가 선형으로 나빠지므로 반드시 같이 진행해야 한다.
+- `sklearn.metrics.pairwise.cosine_similarity`
+
+개선:
+
+- 정규화된 행렬 기준 `numpy matmul`
+
+효과:
+
+- Python/Sklearn 오버헤드 감소
+- Windows / macOS 공통 적용 가능
+
+### C. FAISS semantic shortlist
+
+기존:
+
+- `semantic.npy` 전체 스캔
+
+개선:
+
+- `semantic.faiss` 자동 생성 후 `faiss_index.search(...)`
+
+효과:
+
+- semantic 후보 검색 추가 가속
+- index 규모가 커질수록 이점 증가
+
+## 순위 변화 영향
+
+### 1차 최적화 vs baseline
+
+- top1 동일: `16104 / 16154`
+- 변경: `50`
+
+이 중:
+
+- `34`개는 top1 score가 완전히 같은 tie
+- 나머지도 대부분 매우 작은 floating-point 차이
+
+즉 큰 의미의 알고리즘 변화보다는 계산 순서/수치 차이에 가까웠다.
+
+### FAISS 적용 후 vs 1차 최적화
+
+- top1 동일: `15934 / 16154`
+- 변경: `220`
+
+이 중:
+
+- `193`개는 score가 완전히 같은 tie
+- 나머지도 모두 `1e-6` 이하 수준의 미세한 차이
+
+즉 FAISS로 인해 top1 이름이 달라진 케이스는 있었지만, 대부분 동점 정렬 순서 차이로 보는 게 맞다.
+
+## MPS 현황
+
+코드에는 이미 MPS 자동 감지가 들어가 있다.
+
+하지만 2026-04-24 기준 이 환경에서는:
+
+- macOS `26.3.1`
+- Python `3.11.15`
+- torch `2.11.0`
+
+조합에서
+
+- `torch.backends.mps.is_built() == True`
+- `torch.backends.mps.is_available() == False`
+
+상태였다.
+
+실제 tensor 생성도 실패했다.
+
+- `torch.ones(1, device="mps")`
+- `RuntimeError: The MPS backend is supported on MacOS 14.0+`
+
+이건 하드웨어 이슈라기보다, 현재 PyTorch가 `macOS 26.x` 버전 체계를 제대로 처리하지 못하는 호환성 문제로 보는 것이 자연스럽다.
+
+결론:
+
+- MPS 경로는 코드상 준비되어 있음
+- 하지만 현재 이 맥 환경에서는 실제 usable 상태가 아님
+- 당분간 Mac에서는 `CPU + FAISS + symbolic 최적화`가 현실적인 주 경로
+
+자세한 설정은 [macos_mps_setup.md](docs/macos_mps_setup.md)를 참고한다.
+
+## Windows 지원 관점
+
+이번 개선은 Windows도 고려해서 넣었다.
+
+유지한 원칙:
+
+- OS 전용 multiprocessing 전제에 의존하지 않음
+- CUDA가 없어도 CPU fallback 가능
+- FAISS는 `faiss-cpu`로 동작 가능
+- symbolic 최적화는 순수 Python 자료구조/NumPy 기반
+
+즉 현재 반영된 최적화는 Windows/macOS 공통으로 안전하게 가져갈 수 있다.
+
+## 지금 우선순위
+
+### 이미 반영 완료
+
+- symbolic scoring 최적화
+- normalized dot similarity
+- FAISS auto-build / auto-load
+- CUDA/MPS/CPU device auto-detect
+
+### 다음 우선순위
+
+1. 실제 `Lua_536/aarch64` retrieval index 준비
+2. 같은 최적화 코드로 Windows 재실측
+3. `candidate_pool` 확대가 정확도에 주는 영향 검증
+4. macOS 26.x를 제대로 지원하는 PyTorch가 나오면 MPS 재검증
+
+## 최종 판단
+
+현재 속도는 이미 충분히 실용적이다.
+
+- baseline `14분 15초`
+- 현재 `3분 37초`
+
+즉 retrieval은 이제 “병목 때문에 못 쓰는 상태”는 아니다.
+
+남은 일은:
+
+- 정확도 향상을 위해 candidate 전략을 더 다듬는 것
+- Lua 5.3 / aarch64 같은 실제 target용 레퍼런스 자산을 채우는 것
+- 필요할 때만 추가 가속(MPS/CUDA)을 붙이는 것

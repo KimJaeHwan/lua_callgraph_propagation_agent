@@ -31,6 +31,7 @@ import argparse
 import json
 import math
 import pickle
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -38,7 +39,6 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from tqdm import tqdm
-from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
 try:
@@ -128,8 +128,18 @@ class FunctionRecord:
     metadata: Dict[str, Any]
     raw_features: Dict[str, Any]
     symbolic_tokens: List[str]
+    symbolic_profile: "SymbolicProfile"
     semantic_text: str
     numeric_vector: np.ndarray
+
+
+@dataclass(frozen=True)
+class SymbolicProfile:
+    all_tokens: frozenset[str]
+    offsets: frozenset[str]
+    compares: frozenset[str]
+    strings: frozenset[str]
+    callees: frozenset[str]
 
 
 @dataclass
@@ -203,11 +213,31 @@ def l2_normalize_rows(matrix: np.ndarray) -> np.ndarray:
 
 
 @lru_cache(maxsize=4)
-@lru_cache(maxsize=4)
 def load_embedding_model(model_name: str) -> SentenceTransformer:
-    print(f"[INFO] loading embedding model: {model_name}")
-    model = SentenceTransformer(model_name, local_files_only=True)
+    device = detect_embedding_device()
+    print(f"[INFO] loading embedding model: {model_name} (device={device})")
+    model = SentenceTransformer(model_name, local_files_only=True, device=device)
     return model
+
+
+def detect_embedding_device() -> str:
+    try:
+        import torch
+    except Exception:
+        return "cpu"
+
+    if torch.cuda.is_available():
+        return "cuda"
+
+    mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is not None and mps_backend.is_built() and mps_backend.is_available():
+        return "mps"
+
+    return "cpu"
+
+
+def normalized_dot_similarity(query_matrix: np.ndarray, reference_matrix: np.ndarray) -> np.ndarray:
+    return np.matmul(query_matrix.astype(np.float32), reference_matrix.T.astype(np.float32))
 
 def collapse_by_function_name(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
@@ -246,6 +276,17 @@ def build_symbolic_tokens(feature: Dict[str, Any]) -> List[str]:
             tokens.append(f"off:{off}")
 
     return sorted(set(tokens))
+
+
+def build_symbolic_profile(tokens: Iterable[str]) -> SymbolicProfile:
+    token_set = frozenset(t for t in tokens if isinstance(t, str) and t)
+    return SymbolicProfile(
+        all_tokens=token_set,
+        offsets=frozenset(tokens_with_prefix(token_set, "off:")),
+        compares=frozenset(tokens_with_prefix(token_set, "cmp:")),
+        strings=frozenset(strong_string_tokens(token_set)),
+        callees=frozenset(tokens_with_prefix(token_set, "callee:")),
+    )
 
 
 def build_semantic_text(feature: Dict[str, Any]) -> str:
@@ -425,7 +466,8 @@ def build_function_record_from_row(row: Dict[str, Any], source_path: Path) -> Fu
         function_name=function_name,
         metadata=metadata,
         raw_features=feature,
-        symbolic_tokens=build_symbolic_tokens(feature),
+        symbolic_tokens=(symbolic_tokens := build_symbolic_tokens(feature)),
+        symbolic_profile=build_symbolic_profile(symbolic_tokens),
         semantic_text=build_semantic_text(feature),
         numeric_vector=build_numeric_vector(feature),
     )
@@ -467,6 +509,7 @@ def load_records(input_dir: Path) -> List[FunctionRecord]:
                         metadata=metadata,
                         raw_features=feature,
                         symbolic_tokens=symbolic_tokens,
+                        symbolic_profile=build_symbolic_profile(symbolic_tokens),
                         semantic_text=semantic_text,
                         numeric_vector=numeric_vector,
                     )
@@ -618,9 +661,20 @@ def load_directory_index(index_dir: Path) -> HybridDiskIndex:
     semantic_npy_path = index_dir / "semantic.npy"
 
     if semantic_faiss_path.exists() and faiss is not None:
+        print(f"[INFO] loading FAISS semantic index: {semantic_faiss_path}")
         faiss_index = faiss.read_index(str(semantic_faiss_path))
     elif semantic_npy_path.exists():
         semantic_matrix = np.load(semantic_npy_path).astype(np.float32)
+        if faiss is not None:
+            print(f"[INFO] building FAISS semantic index from {semantic_npy_path} ...")
+            faiss_index = faiss.IndexFlatIP(semantic_matrix.shape[1])
+            faiss_index.add(semantic_matrix.astype(np.float32))
+            try:
+                faiss.write_index(faiss_index, str(semantic_faiss_path))
+                print(f"[INFO] saved FAISS semantic index: {semantic_faiss_path}")
+            except Exception as exc:
+                print(f"[WARN] failed to save FAISS semantic index {semantic_faiss_path}: {exc}")
+            semantic_matrix = None
     elif semantic_faiss_path.exists():
         raise RuntimeError(
             f"FAISS index exists at {semantic_faiss_path}, but faiss is not installed. "
@@ -659,6 +713,14 @@ def symbolic_jaccard(tokens_a: Iterable[str], tokens_b: Iterable[str]) -> float:
         return 0.0
     inter = len(a & b)
     union = len(a | b)
+    return inter / union if union else 0.0
+
+
+def symbolic_jaccard_profiles(profile_a: SymbolicProfile, profile_b: SymbolicProfile) -> float:
+    if not profile_a.all_tokens and not profile_b.all_tokens:
+        return 0.0
+    inter = len(profile_a.all_tokens & profile_b.all_tokens)
+    union = len(profile_a.all_tokens | profile_b.all_tokens)
     return inter / union if union else 0.0
 
 
@@ -756,6 +818,74 @@ def compute_symbolic_bonus_v2(
     return min(bonus, SYMBOLIC_BONUS_V2_CAP)
 
 
+def compute_symbolic_bonus_profiles(
+    query_profile: SymbolicProfile,
+    candidate_profile: SymbolicProfile,
+    base_score: float,
+) -> float:
+    offset_overlap = len(query_profile.offsets & candidate_profile.offsets)
+    compare_overlap = len(query_profile.compares & candidate_profile.compares)
+    string_overlap = len(query_profile.strings & candidate_profile.strings)
+    callee_overlap = len(query_profile.callees & candidate_profile.callees)
+
+    bonus = 0.0
+    bonus += threshold_bonus(offset_overlap, [(2, 0.02), (3, 0.03), (5, 0.03)])
+    bonus += threshold_bonus(compare_overlap, [(1, 0.02), (2, 0.03), (3, 0.02)])
+    bonus += threshold_bonus(string_overlap, [(1, 0.02), (2, 0.02)])
+    bonus += threshold_bonus(callee_overlap, [(1, 0.01), (2, 0.01)])
+
+    if base_score >= 0.40:
+        if string_overlap >= 2:
+            bonus += 0.15
+        elif string_overlap >= 1:
+            bonus += 0.10
+
+    if base_score >= 0.45:
+        if 1 <= compare_overlap <= 2:
+            bonus += 0.06
+        if 2 <= offset_overlap <= 4:
+            bonus += 0.05
+
+    return min(bonus, SYMBOLIC_BONUS_CAP)
+
+
+def compute_symbolic_bonus_v2_profiles(
+    query_profile: SymbolicProfile,
+    candidate_profile: SymbolicProfile,
+    base_score: float,
+    best_base_score: float,
+) -> float:
+    offset_overlap = len(query_profile.offsets & candidate_profile.offsets)
+    compare_overlap = len(query_profile.compares & candidate_profile.compares)
+    string_overlap = len(query_profile.strings & candidate_profile.strings)
+    callee_overlap = len(query_profile.callees & candidate_profile.callees)
+
+    bonus = 0.0
+    bonus += threshold_bonus(offset_overlap, [(2, 0.010), (3, 0.015), (5, 0.015)])
+    bonus += threshold_bonus(compare_overlap, [(1, 0.010), (2, 0.015), (3, 0.015)])
+    bonus += threshold_bonus(string_overlap, [(1, 0.015), (2, 0.015)])
+    bonus += threshold_bonus(callee_overlap, [(1, 0.005), (2, 0.005)])
+
+    if base_score >= 0.45:
+        if string_overlap >= 2:
+            bonus += 0.070
+        elif string_overlap >= 1:
+            bonus += 0.040
+
+    if base_score >= 0.50:
+        if 1 <= compare_overlap <= 2:
+            bonus += 0.030
+        if 2 <= offset_overlap <= 4:
+            bonus += 0.020
+
+    if base_score < best_base_score - 0.03:
+        bonus *= 0.30
+    if base_score < 0.60:
+        bonus = min(bonus, 0.03)
+
+    return min(bonus, SYMBOLIC_BONUS_V2_CAP)
+
+
 def compute_semantic_scores_and_candidates(
     index: Union[HybridEmbeddingIndex, HybridDiskIndex],
     query_sem: np.ndarray,
@@ -778,7 +908,7 @@ def compute_semantic_scores_and_candidates(
     if semantic_matrix is None:
         raise RuntimeError("semantic_matrix is not available for this index")
 
-    semantic_scores = cosine_similarity(query_sem, semantic_matrix)[0].astype(np.float32)
+    semantic_scores = normalized_dot_similarity(query_sem, semantic_matrix)[0].astype(np.float32)
 
     # candidate_pool 적용: 상위 N개만 symbolic 루프 대상으로 제한
     if candidate_pool is not None and candidate_pool < len(index.records):
@@ -815,7 +945,9 @@ def _score_candidates(
     query_num = l2_normalize_rows(query_num)
     numeric_scores = np.full(len(index.records), 0.0, dtype=np.float32)
     if len(candidate_ids) > 0:
-        numeric_scores_candidate = cosine_similarity(query_num, index.numeric_matrix[candidate_ids])[0]
+        numeric_scores_candidate = normalized_dot_similarity(
+            query_num, index.numeric_matrix[candidate_ids]
+        )[0]
         numeric_scores[candidate_ids] = numeric_scores_candidate.astype(np.float32)
 
     symbolic_scores = np.full(len(index.records), 0.0, dtype=np.float32)
@@ -827,24 +959,26 @@ def _score_candidates(
             + BASE_WEIGHTS["numeric"] * numeric_scores
         ).astype(np.float32)
         best_base_score = float(np.max(base_scores[candidate_ids])) if len(candidate_ids) > 0 else 0.0
+        query_profile = query_record.symbolic_profile
         for i in candidate_ids.tolist():
             if scoring_mode == "bonus_v2":
-                symbolic_scores[i] = compute_symbolic_bonus_v2(
-                    query_record.symbolic_tokens,
-                    index.records[i].symbolic_tokens,
+                symbolic_scores[i] = compute_symbolic_bonus_v2_profiles(
+                    query_profile,
+                    index.records[i].symbolic_profile,
                     float(base_scores[i]),
                     best_base_score,
                 )
             else:
-                symbolic_scores[i] = compute_symbolic_bonus(
-                    query_record.symbolic_tokens,
-                    index.records[i].symbolic_tokens,
+                symbolic_scores[i] = compute_symbolic_bonus_profiles(
+                    query_profile,
+                    index.records[i].symbolic_profile,
                     float(base_scores[i]),
                 )
         total_scores = base_scores + symbolic_scores
     else:
+        query_profile = query_record.symbolic_profile
         for i in candidate_ids.tolist():
-            symbolic_scores[i] = symbolic_jaccard(query_record.symbolic_tokens, index.records[i].symbolic_tokens)
+            symbolic_scores[i] = symbolic_jaccard_profiles(query_profile, index.records[i].symbolic_profile)
         total_scores = (
             weights["symbolic"] * symbolic_scores
             + weights["numeric"] * numeric_scores
@@ -959,6 +1093,7 @@ def build_query_record_from_file(json_file: Path, query_func: str) -> FunctionRe
     if target is None:
         raise KeyError(f"function_name '{query_func}' not found in {json_file}")
 
+    symbolic_tokens = build_symbolic_tokens(target)
     return FunctionRecord(
         function_id=f"{json_file.name}::{target.get('function_name')}@{target.get('entry_point')}",
         source_json=str(json_file),
@@ -969,7 +1104,8 @@ def build_query_record_from_file(json_file: Path, query_func: str) -> FunctionRe
             "source_json": str(json_file),
         },
         raw_features=target,
-        symbolic_tokens=build_symbolic_tokens(target),
+        symbolic_tokens=symbolic_tokens,
+        symbolic_profile=build_symbolic_profile(symbolic_tokens),
         semantic_text=build_semantic_text(target),
         numeric_vector=build_numeric_vector(target),
     )
