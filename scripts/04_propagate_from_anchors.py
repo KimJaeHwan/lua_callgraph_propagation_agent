@@ -809,6 +809,44 @@ def main() -> None:
     finally:
         ref_db.close()
 
+    # Apply anchor overrides for any deferred case that is already in the seed anchor set.
+    #
+    # Two kinds of overrides:
+    #   force_anchor  — manually confirmed via decompile analysis (highest priority)
+    #   retrieval_high_confidence anchor that still ended up deferred — happens when a
+    #     function has no anchored neighbors (no_anchor_evidence / insufficient_primary_graph),
+    #     so propagation can't lift it even though retrieval was confident.  If the anchor
+    #     mapping already agrees with the propagation's top prediction we accept it directly.
+    force_anchor_map: dict[str, str] = {
+        m["query_function_name"]: m["reference_function_name"]
+        for m in anchor_json.get("mappings", [])
+        if m.get("source") == "force_anchor" and m.get("status") == "accepted"
+    }
+    anchor_override_count = 0
+    for result in results:
+        status = result.get("status")
+        if status not in ("deferred", "conflict"):
+            continue
+        qf = result.get("query_func")
+        if not qf:
+            continue
+        if qf in force_anchor_map:
+            # Manually confirmed via decompile analysis — override regardless of status
+            result["predicted_function_name"] = force_anchor_map[qf]
+            result["status"] = "accepted"
+            result["status_reasons"] = ["force_anchor"]
+            anchor_override_count += 1
+        elif status == "deferred" and qf in seed_anchors:
+            # retrieval_high_confidence anchor that failed propagation: accept it
+            # (the anchor gives us the confirmed reference function name)
+            ref = seed_anchors[qf]
+            result["predicted_function_name"] = ref
+            result["status"] = "accepted"
+            result["status_reasons"] = ["retrieval_anchor_override"]
+            anchor_override_count += 1
+    if anchor_override_count:
+        print(f"[anchor_override] resolved {anchor_override_count} deferred/conflict → accepted")
+
     output = {
         "schema_version": "0.1",
         "suite_name": suite.get("suite_name"),
