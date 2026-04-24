@@ -86,8 +86,30 @@ def detect_visible_name_anchors(
         return []
 
     query_data = load_json(query_json_path)
-    # query JSON can be a list of functions or {"functions": [...]}
-    if isinstance(query_data, list):
+    # Three supported formats:
+    #   1. extract_manifest  — {"feature_files": ["/abs/path/feat.json", ...], ...}
+    #      Each feature file is a list of function-record dicts.
+    #   2. plain list        — [{"function_name": ..., ...}, ...]
+    #   3. wrapped object    — {"functions": [...]} or {"results": [...]}
+    if isinstance(query_data, dict) and "feature_files" in query_data:
+        # expand all feature files listed in the manifest
+        functions: list[dict] = []
+        for ff_path_str in query_data.get("feature_files", []):
+            ff_path = Path(ff_path_str)
+            if not ff_path.exists():
+                print(f"[WARN] feature file not found, skipping: {ff_path}")
+                continue
+            try:
+                ff_data = load_json(ff_path)
+            except Exception as exc:
+                print(f"[WARN] could not read feature file {ff_path}: {exc}")
+                continue
+            if isinstance(ff_data, list):
+                functions.extend(ff_data)
+            else:
+                functions.extend(ff_data.get("functions", ff_data.get("results", [])))
+        print(f"[INFO] loaded {len(functions)} function records from {len(query_data.get('feature_files', []))} feature file(s)")
+    elif isinstance(query_data, list):
         functions = query_data
     else:
         functions = query_data.get("functions", query_data.get("results", []))
