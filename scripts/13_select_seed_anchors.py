@@ -123,16 +123,49 @@ def detect_visible_name_anchors(
     return anchors
 
 
+def _load_preserved_anchors(output_json: Path) -> list[dict]:
+    """Load force_anchor entries from an existing seed_anchors file to preserve them.
+
+    Only entries whose source is NOT one of the auto-generated sources are
+    kept — this prevents stale retrieval/visible-name entries from surviving
+    across re-runs while keeping manually registered force anchors intact.
+    """
+    AUTO_SOURCES = {"retrieval_high_confidence", "name_visible"}
+    if not output_json.exists():
+        return []
+    try:
+        data = load_json(output_json)
+        preserved = [
+            m for m in data.get("mappings", [])
+            if m.get("source") not in AUTO_SOURCES and m.get("status") == "accepted"
+        ]
+        return preserved
+    except Exception as exc:
+        print(f"[WARN] could not read existing anchor file ({exc}); starting fresh")
+        return []
+
+
 def main() -> None:
     args = parse_args()
     source = load_json(args.retrieval_json)
+
+    # ── 0. Preserve manually registered anchors (e.g. force_anchor) ─────────
+    #   These must survive re-runs of this script so that run_analysis does
+    #   not wipe out anchors registered via register_force_anchor /
+    #   batch_register_force_anchors.
+    preserved_anchors = _load_preserved_anchors(args.output_json)
+    preserved_names   = {m["query_function_name"] for m in preserved_anchors}
+    if preserved_anchors:
+        print(f"[INFO] preserving {len(preserved_anchors)} manually registered anchor(s) "
+              f"(sources: {sorted({m.get('source') for m in preserved_anchors})})")
 
     # ── 1. Visible-name anchors (confidence 1.0, highest priority) ──────────
     visible_anchors: list[dict] = []
     if args.query_json and args.reference_db:
         if args.query_json.exists() and args.reference_db.exists():
             visible_anchors = detect_visible_name_anchors(
-                args.query_json, args.reference_db, already_registered=set()
+                args.query_json, args.reference_db,
+                already_registered=preserved_names,
             )
         else:
             if not args.query_json.exists():
@@ -140,7 +173,7 @@ def main() -> None:
             if not args.reference_db.exists():
                 print(f"[WARN] --reference-db not found: {args.reference_db}")
 
-    already_query_funcs = {a["query_function_name"] for a in visible_anchors}
+    already_query_funcs = preserved_names | {a["query_function_name"] for a in visible_anchors}
 
     # ── 2. Retrieval-based anchors ───────────────────────────────────────────
     retrieval_anchors: list[dict] = []
@@ -156,7 +189,6 @@ def main() -> None:
             continue
         qfunc = case.get("query_func")
         if qfunc in already_query_funcs:
-            # visible-name already covers this query function — skip
             continue
         retrieval_anchors.append(
             {
@@ -172,8 +204,8 @@ def main() -> None:
             }
         )
 
-    # visible anchors first so propagation treats them as the firmest seeds
-    mappings = visible_anchors + retrieval_anchors
+    # preserved → visible → retrieval  (firmest seeds first)
+    mappings = preserved_anchors + visible_anchors + retrieval_anchors
 
     output = {
         "schema_version": "0.1",
@@ -190,7 +222,12 @@ def main() -> None:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     print(f"[OK] saved seed anchors: {args.output_json}")
-    print(f"[INFO] total anchors: {len(mappings)}  (visible={len(visible_anchors)}, retrieval={len(retrieval_anchors)})")
+    print(
+        f"[INFO] total anchors: {len(mappings)}"
+        f"  (preserved={len(preserved_anchors)}"
+        f", visible={len(visible_anchors)}"
+        f", retrieval={len(retrieval_anchors)})"
+    )
 
 
 if __name__ == "__main__":

@@ -10,55 +10,14 @@ from fastmcp import FastMCP
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+# config_loader는 scripts/ 에 있으므로 경로 추가 후 import
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from config_loader import load_config as _cl_load_config, resolve_paths as _cl_resolve_paths, deferred_top_candidates as _cl_deferred_top_candidates  # noqa: E402
+
 
 def _default_runtime_paths(config: dict) -> dict[str, Any]:
-    """Compute conventional output paths from a pipeline config.
-
-    Supports both config formats:
-      - New format: session_name / analysis.lua_version / analysis.architecture at top level
-      - Legacy format: paths.session_name / paths.target_lua_version / paths.target_architecture
-    """
-    # New format: session_name + analysis section at top level
-    if "session_name" in config or "analysis" in config or "extraction" in config:
-        session      = config.get("session_name", "runtime_session")
-        analysis     = config.get("analysis", {})
-        lua_version  = analysis.get("lua_version") or "Lua_547"
-        architecture = analysis.get("architecture") or "x86_64"
-        extra: dict  = {}  # new format has no extra path overrides section
-    else:
-        # Legacy format: paths dict nested inside config
-        paths_dict   = config.get("paths", config)
-        session      = paths_dict.get("session_name", "runtime_session")
-        lua_version  = paths_dict.get("target_lua_version") or "Lua_547"
-        architecture = paths_dict.get("target_architecture") or "x86_64"
-        extra        = paths_dict
-
-    normalized_arch = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
-    result_root = f"data/runtime/results/{session}"
-    query_root  = f"data/runtime/query_features/{session}"
-
-    defaults: dict[str, Any] = {
-        "session_name":           session,
-        "target_lua_version":     lua_version,
-        "target_architecture":    architecture,
-        "extract_manifest_json":  f"{query_root}/extract_manifest.json",
-        "query_feature_json":     "",
-        "retrieval_index":        f"data/inputs/retrieval_indexes/{lua_version}/{normalized_arch}/runtime",
-        "retrieval_output_json":  f"{result_root}/retrieval_result.json",
-        "seed_anchor_json":       f"{result_root}/seed_anchors.json",
-        "runtime_suite_json":     f"{result_root}/runtime_propagation_suite.json",
-        "reference_db":           f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
-        "embedding_project_root": ".",
-        "propagation_output_json":f"{result_root}/propagation_result.json",
-        "deferred_output_json":   f"{result_root}/deferred_analysis.json",
-        "final_report_json":      f"{result_root}/final_mapping_report.json",
-    }
-
-    merged = defaults.copy()
-    for key, value in extra.items():
-        if value not in (None, ""):
-            merged[key] = value
-    return merged
+    """Delegate to config_loader.resolve_paths() — single source of truth."""
+    return _cl_resolve_paths(config)
 
 mcp = FastMCP(
     name="lua-callgraph-propagation-agent",
@@ -301,13 +260,8 @@ def _save_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def _deferred_top_candidates(config: dict) -> str:
-    """새 포맷(analysis.deferred_analysis) 또는 구 포맷(steps.deferred_analysis) 모두 지원."""
-    v = (
-        config.get("analysis", {}).get("deferred_analysis", {}).get("top_candidates")
-        or config.get("steps", {}).get("deferred_analysis", {}).get("top_candidates")
-        or 5
-    )
-    return str(v)
+    """Delegate to config_loader.deferred_top_candidates()."""
+    return str(_cl_deferred_top_candidates(config))
 
 
 def _run_downstream_steps(

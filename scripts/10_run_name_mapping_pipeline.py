@@ -45,6 +45,10 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "data" / "configs" / "runtime_recommended_preextracted.json"
 
+# config_loader는 같은 scripts/ 폴더에 있으므로 경로 추가 후 import
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from config_loader import load_config, is_new_format as _new_format, resolve_paths as _cl_resolve_paths  # noqa: E402
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -72,45 +76,11 @@ def resolve_path(path: str | Path) -> Path:
     return p if p.is_absolute() else (PROJECT_ROOT / p).resolve()
 
 
-# ── New config format helpers ──────────────────────────────────────────────────
-
-def _new_format(config: dict) -> bool:
-    return "session_name" in config and ("extraction" in config or "analysis" in config)
-
+# ── New config format helpers — 경로 해석은 config_loader에 위임 ─────────────
 
 def _computed_paths(config: dict) -> dict[str, Any]:
-    """Derive all runtime paths from session_name + lua_version + architecture."""
-    session = config["session_name"]
-    ext = config.get("extraction", {})
-    ana = config.get("analysis", {})
-
-    lua_version = ana.get("lua_version") or ext.get("lua_version") or "Lua_547"
-    architecture = ana.get("architecture") or ext.get("architecture") or "x86_64"
-    arch_norm = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
-
-    result_root = f"data/runtime/results/{session}"
-    query_root = f"data/runtime/query_features/{session}"
-
-    return {
-        "session_name": session,
-        "lua_version": lua_version,
-        "architecture": architecture,
-        "arch_norm": arch_norm,
-        "extract_manifest_json": f"{query_root}/extract_manifest.json",
-        "retrieval_index": f"data/inputs/retrieval_indexes/{lua_version}/{arch_norm}/runtime",
-        "retrieval_output_json": f"{result_root}/retrieval_result.json",
-        "seed_anchor_json": f"{result_root}/seed_anchors.json",
-        "runtime_suite_json": f"{result_root}/runtime_propagation_suite.json",
-        "reference_db": f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
-        "propagation_output_json": f"{result_root}/propagation_result.json",
-        "deferred_output_json": f"{result_root}/deferred_analysis.json",
-        "final_report_json": f"{result_root}/final_mapping_report.json",
-        "embedding_project_root": ".",
-        "extractor_work_root": "data/runtime/extractor_workspace",
-        "query_feature_output_root": "data/runtime/query_features",
-        "extractor_script": "src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py",
-        "retrieval_script": "src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py",
-    }
+    """Derive all runtime paths — delegates to config_loader.resolve_paths()."""
+    return _cl_resolve_paths(config)
 
 
 def build_extraction_commands(config: dict) -> list[dict]:
