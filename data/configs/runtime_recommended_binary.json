@@ -7,7 +7,8 @@
     "target_lua_version": "Lua_547",
     "target_architecture": "x86_64",
     "target_opt_level": "O0",
-    "target_strip_mode": "nostrip"
+    "target_strip_mode": "nostrip",
+    "ghidra_home": ""
   },
   "steps": {
     "extract_query_features": {

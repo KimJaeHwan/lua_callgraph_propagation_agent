@@ -178,6 +178,8 @@ def build_step_commands(config: dict) -> list[dict]:
             "--python-bin",
             paths.get("extractor_python", python),
         ]
+        if paths.get("ghidra_home"):
+            cmd.extend(["--ghidra-home", paths["ghidra_home"]])
         commands.append(
             {
                 "name": "extract_query_features",
