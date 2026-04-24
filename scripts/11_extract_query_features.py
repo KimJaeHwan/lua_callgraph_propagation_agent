@@ -236,6 +236,7 @@ def main() -> None:
     env["JAVA_TOOL_OPTIONS"] = f"-Duser.home={ghidra_user_home}"
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
 
     cmd = [
         args.python_bin,
@@ -252,24 +253,21 @@ def main() -> None:
     if args.list_only:
         cmd.append("--list-only")
 
-    # stdout을 실시간 스트리밍 — tqdm 진행바가 즉시 보임
+    # stdout + stderr 합쳐서 실시간 스트리밍 — tqdm(stderr)도 즉시 보임
     proc = subprocess.Popen(
         cmd,
         cwd=work_dir,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         encoding="utf-8",
         errors="replace",
         env=env,
     )
     assert proc.stdout is not None
-    assert proc.stderr is not None
     for line in proc.stdout:
         print(line, end="", flush=True)
     proc.wait()
     if proc.returncode != 0:
-        for line in proc.stderr:
-            print(line, end="", flush=True, file=sys.stderr)
         raise SystemExit(proc.returncode)
 
     if args.list_only:

@@ -174,6 +174,7 @@ def flatten_compare(compare_map: Dict[str, Any]) -> List[Tuple[str, int]]:
     return items
 
 
+@lru_cache(maxsize=8)
 def parse_feature_json_file(json_path: Path) -> List[Dict[str, Any]]:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -201,6 +202,7 @@ def l2_normalize_rows(matrix: np.ndarray) -> np.ndarray:
     return matrix / norms
 
 
+@lru_cache(maxsize=4)
 @lru_cache(maxsize=4)
 def load_embedding_model(model_name: str) -> SentenceTransformer:
     print(f"[INFO] loading embedding model: {model_name}")
@@ -374,6 +376,7 @@ def make_function_id(json_path: Path, feature: Dict[str, Any], input_root: Path)
 # =========================
 # Loading records
 # =========================
+@lru_cache(maxsize=8)
 def parse_feature_json_file(json_path: Path) -> List[Dict[str, Any]]:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -776,32 +779,30 @@ def compute_semantic_scores_and_candidates(
         raise RuntimeError("semantic_matrix is not available for this index")
 
     semantic_scores = cosine_similarity(query_sem, semantic_matrix)[0].astype(np.float32)
-    candidate_ids = np.arange(len(index.records), dtype=np.int32)
+
+    # candidate_pool 적용: 상위 N개만 symbolic 루프 대상으로 제한
+    if candidate_pool is not None and candidate_pool < len(index.records):
+        top_ids = np.argpartition(semantic_scores, -candidate_pool)[-candidate_pool:]
+        candidate_ids = top_ids[np.argsort(semantic_scores[top_ids])[::-1]].astype(np.int32)
+    else:
+        candidate_ids = np.argsort(semantic_scores)[::-1].astype(np.int32)
+
     return semantic_scores, candidate_ids
 
 
-def search_index(
+def _score_candidates(
     index: Union[HybridEmbeddingIndex, HybridDiskIndex],
     query_record: FunctionRecord,
-    topk: int = 5,
-    exclude_same_id: bool = True,
-    hybrid_weights: Optional[Dict[str, float]] = None,
-    candidate_pool: Optional[int] = None,
-    scoring_mode: str = "jaccard",
+    query_sem: np.ndarray,
+    topk: int,
+    candidate_pool: Optional[int],
+    scoring_mode: str,
+    exclude_same_id: bool,
+    hybrid_weights: Optional[Dict[str, float]],
 ) -> List[Dict[str, Any]]:
+    """Core scoring logic shared by search_index and search_index_with_embedding."""
     weights = hybrid_weights or HYBRID_WEIGHTS
-    if scoring_mode not in {"jaccard", "bonus", "bonus_v2"}:
-        raise ValueError(f"Unsupported scoring_mode: {scoring_mode}")
 
-    model = load_embedding_model(index.semantic_model_name)
-
-    print("[INFO] computing semantic similarity...")
-    query_sem = model.encode(
-        [query_record.semantic_text],
-        show_progress_bar=False,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-    ).astype(np.float32)
     semantic_scores, candidate_ids = compute_semantic_scores_and_candidates(
         index=index,
         query_sem=query_sem,
@@ -809,7 +810,6 @@ def search_index(
         candidate_pool=candidate_pool,
     )
 
-    print("[INFO] computing numeric similarity...")
     query_num = query_record.numeric_vector.reshape(1, -1).astype(np.float32)
     query_num = apply_zscore(query_num, index.numeric_mean, index.numeric_std)
     query_num = l2_normalize_rows(query_num)
@@ -818,7 +818,6 @@ def search_index(
         numeric_scores_candidate = cosine_similarity(query_num, index.numeric_matrix[candidate_ids])[0]
         numeric_scores[candidate_ids] = numeric_scores_candidate.astype(np.float32)
 
-    print("[INFO] computing symbolic score...")
     symbolic_scores = np.full(len(index.records), 0.0, dtype=np.float32)
     base_scores = np.full(len(index.records), 0.0, dtype=np.float32)
 
@@ -828,7 +827,7 @@ def search_index(
             + BASE_WEIGHTS["numeric"] * numeric_scores
         ).astype(np.float32)
         best_base_score = float(np.max(base_scores[candidate_ids])) if len(candidate_ids) > 0 else 0.0
-        for i in tqdm(candidate_ids.tolist(), desc="symbolic_bonus", unit="func"):
+        for i in candidate_ids.tolist():
             if scoring_mode == "bonus_v2":
                 symbolic_scores[i] = compute_symbolic_bonus_v2(
                     query_record.symbolic_tokens,
@@ -844,7 +843,7 @@ def search_index(
                 )
         total_scores = base_scores + symbolic_scores
     else:
-        for i in tqdm(candidate_ids.tolist(), desc="symbolic_jaccard", unit="func"):
+        for i in candidate_ids.tolist():
             symbolic_scores[i] = symbolic_jaccard(query_record.symbolic_tokens, index.records[i].symbolic_tokens)
         total_scores = (
             weights["symbolic"] * symbolic_scores
@@ -856,13 +855,11 @@ def search_index(
             + weights["semantic"] * semantic_scores
         ).astype(np.float32)
 
-    print("[INFO] collecting results...")
     results: List[Dict[str, Any]] = []
     for i in candidate_ids.tolist():
         rec = index.records[i]
         if exclude_same_id and rec.function_id == query_record.function_id:
             continue
-
         results.append(
             {
                 "function_id": rec.function_id,
@@ -882,6 +879,63 @@ def search_index(
 
     results.sort(key=lambda x: x["score_total"], reverse=True)
     return results[:topk]
+
+
+def search_index(
+    index: Union[HybridEmbeddingIndex, HybridDiskIndex],
+    query_record: FunctionRecord,
+    topk: int = 5,
+    exclude_same_id: bool = True,
+    hybrid_weights: Optional[Dict[str, float]] = None,
+    candidate_pool: Optional[int] = None,
+    scoring_mode: str = "jaccard",
+) -> List[Dict[str, Any]]:
+    """Search using a single query record (encodes semantic text internally)."""
+    if scoring_mode not in {"jaccard", "bonus", "bonus_v2"}:
+        raise ValueError(f"Unsupported scoring_mode: {scoring_mode}")
+    model = load_embedding_model(index.semantic_model_name)
+    query_sem = model.encode(
+        [query_record.semantic_text],
+        show_progress_bar=False,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    ).astype(np.float32)
+    return _score_candidates(
+        index=index,
+        query_record=query_record,
+        query_sem=query_sem,
+        topk=topk,
+        candidate_pool=candidate_pool,
+        scoring_mode=scoring_mode,
+        exclude_same_id=exclude_same_id,
+        hybrid_weights=hybrid_weights,
+    )
+
+
+def search_index_with_embedding(
+    index: Union[HybridEmbeddingIndex, HybridDiskIndex],
+    query_record: FunctionRecord,
+    query_embedding: np.ndarray,
+    topk: int = 5,
+    exclude_same_id: bool = True,
+    hybrid_weights: Optional[Dict[str, float]] = None,
+    candidate_pool: Optional[int] = None,
+    scoring_mode: str = "jaccard",
+) -> List[Dict[str, Any]]:
+    """Search using a pre-computed query embedding (skips model.encode)."""
+    if scoring_mode not in {"jaccard", "bonus", "bonus_v2"}:
+        raise ValueError(f"Unsupported scoring_mode: {scoring_mode}")
+    query_sem = query_embedding.reshape(1, -1).astype(np.float32)
+    return _score_candidates(
+        index=index,
+        query_record=query_record,
+        query_sem=query_sem,
+        topk=topk,
+        candidate_pool=candidate_pool,
+        scoring_mode=scoring_mode,
+        exclude_same_id=exclude_same_id,
+        hybrid_weights=hybrid_weights,
+    )
 
 
 # =========================

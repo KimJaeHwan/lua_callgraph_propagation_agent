@@ -1,45 +1,25 @@
 {
   "pipeline_name": "runtime_recommended_preextracted",
-  "description": "Recommended default config for pre-extracted query feature input.",
-  "paths": {
-    "session_name": "recommended_preextracted_run",
-    "target_lua_version": "Lua_547",
-    "target_architecture": "x86_64",
-    "query_feature_json": "data/inputs/query_features/lua547_x86_single_deregister_tm_clones.json"
-  },
-  "steps": {
-    "extract_query_features": {
-      "enabled": false
-    },
-    "bulk_retrieval": {
-      "enabled": true,
+  "description": "Config for pre-extracted feature input (no Ghidra needed). Use run_analysis to execute.",
+  "session_name": "recommended_preextracted_run",
+  "analysis": {
+    "lua_version": "Lua_547",
+    "architecture": "x86_64",
+    "query_json": "data/inputs/query_features/lua547_x86_single_deregister_tm_clones.json",
+    "retrieval": {
       "candidate_pool": 100,
       "topk": 20,
-      "scoring_mode": "bonus_v2",
-      "mode": "runtime_query"
+      "scoring_mode": "bonus_v2"
     },
-    "select_seed_anchors": {
-      "enabled": true,
+    "seed_anchors": {
       "min_top1_score": 0.92,
       "min_margin": 0.05
     },
-    "build_runtime_suite": {
-      "enabled": true
-    },
-    "build_reference_db": {
-      "enabled": false,
-      "replace": false
-    },
     "propagation": {
-      "enabled": true
+      "iterative": true
     },
     "deferred_analysis": {
-      "enabled": true,
       "top_candidates": 5
-    },
-    "final_report": {
-      "enabled": true
     }
-  },
-  "external_steps": []
+  }
 }

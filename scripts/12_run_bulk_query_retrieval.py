@@ -2,8 +2,8 @@
 """
 Run retrieval for every function inside one extracted query feature JSON.
 
-This wrapper keeps the runtime flow inside lua_callgraph_propagation_agent while
-loading the vendored hybrid retrieval implementation from this repository.
+Optimization: all semantic texts are encoded in a single batch call before
+the scoring loop, so the embedding model runs once (not once per function).
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 from tqdm import tqdm
 
@@ -55,7 +54,7 @@ def load_module(script_path: Path):
 
 
 def collapse_by_function_name(results: list[dict]) -> list[dict]:
-    seen = set()
+    seen: set[str] = set()
     collapsed = []
     for row in results:
         name = row.get("function_name")
@@ -86,18 +85,48 @@ def main() -> None:
         rows = json.load(f)
 
     if not isinstance(rows, list):
-        raise SystemExit(f"Expected list in query JSON: {args.query_json}")
+        raise SystemExit(f"Expected list in query JSON: {query_json}")
 
-    cases = []
     valid_rows = [r for r in rows if r.get("function_name")]
-    print(f"[INFO] running retrieval for {len(valid_rows)} functions...")
-    for row in tqdm(valid_rows, desc="  retrieval", unit="func", ncols=72):
-        query_func = row.get("function_name")
+    print(f"[INFO] building query records for {len(valid_rows)} functions...")
 
-        query = module.build_query_record_from_file(query_json.resolve(), query_func)
-        raw_results = module.search_index(
+    # ── 1. 모든 query record 빌드 ──────────────────────────────────────────────
+    query_records = []
+    for row in valid_rows:
+        qr = module.build_query_record_from_file(query_json.resolve(), row["function_name"])
+        query_records.append(qr)
+
+    # ── 2. 전체 semantic text 배치 인코딩 (모델 1회 호출) ─────────────────────
+    print(f"[INFO] batch encoding {len(query_records)} semantic texts...")
+    model = module.load_embedding_model(index.semantic_model_name)
+    import numpy as np
+    all_texts = [qr.semantic_text for qr in query_records]
+    all_embeddings = model.encode(
+        all_texts,
+        batch_size=64,
+        show_progress_bar=True,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    ).astype(np.float32)
+    print(f"[INFO] encoding done. running retrieval for {len(query_records)} functions...")
+
+    # ── 3. 함수별 검색 (embedding 재사용) ─────────────────────────────────────
+    cases = []
+    for idx, (row, qr) in enumerate(
+        tqdm(
+            zip(valid_rows, query_records),
+            total=len(valid_rows),
+            desc="  retrieval",
+            unit="func",
+            ncols=72,
+            file=sys.stdout,
+            mininterval=2.0,
+        )
+    ):
+        raw_results = module.search_index_with_embedding(
             index=index,
-            query_record=query,
+            query_record=qr,
+            query_embedding=all_embeddings[idx],
             topk=max(args.topk, 50),
             exclude_same_id=False,
             candidate_pool=args.candidate_pool,
@@ -105,14 +134,14 @@ def main() -> None:
         )
         unique_results = collapse_by_function_name(raw_results)
         entry_point = row.get("entry_point") or "unknown"
-        case_id = f"{query_func}@{entry_point}"
+        case_id = f"{qr.function_name}@{entry_point}"
 
         cases.append(
             {
                 "case_id": case_id,
                 "mode": args.mode,
                 "query_file": str(query_json.resolve()),
-                "query_func": query_func,
+                "query_func": qr.function_name,
                 "expected_function": None,
                 "topk": args.topk,
                 "raw_top1_function": raw_results[0]["function_name"] if raw_results else "",

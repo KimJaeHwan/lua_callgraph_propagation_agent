@@ -1,47 +1,41 @@
 #!/usr/bin/env python3
 """
-Ghidra PyGhidra Lua Feature Extractor - FINAL (HighFunction + Listing Hybrid)
+Ghidra PyGhidra Lua Feature Extractor (single-process)
 - HighFunction: struct_offsets, read/write, compare, strings
 - Listing: histogram, callgraph, bb, constants
+
+Single Ghidra project per run. pyghidra.start() is called once in main(),
+and all Ghidra JVM imports are done immediately after start().
 """
 
-#!/usr/bin/env python3
-
 import argparse
-import os
-import sys
-import json
-import shutil
-import time
-from pathlib import Path
-from datetime import datetime
-from multiprocessing import Pool, cpu_count
-import platform
-from tqdm import tqdm
-from collections import Counter, defaultdict
 import itertools
+import json
+import os
+import shutil
+import sys
+import time
+from collections import Counter, defaultdict
+from datetime import datetime
+from pathlib import Path
 
-# ====================== 설정 ======================
+from tqdm import tqdm
+
+
+# ====================== 경로 설정 ======================
 BASE_DIR = Path.cwd().absolute()
 BINARIES_DIR = BASE_DIR / "binaries"
 OUTPUT_BASE = BASE_DIR / "outputs"
-PROJECT_BASE = BASE_DIR / "extractor" / "ghidra_projects"
+PROJECT_BASE = BASE_DIR / "ghidra_projects"
 PROCESSED_DIR = BASE_DIR / "processed_binaries"
 
 PROCESSED_DIR.mkdir(exist_ok=True)
 
-# Windows: pyghidra/JVM은 프로세스당 1개만 허용 → 단일 프로세스 순차 처리
-# macOS/Linux: multiprocessing Pool 사용 가능
-WORKERS = 1 if platform.system() == "Windows" else 8
 
-
-
-# BATCH_SIZE = 1800
-
-# ====================== Helper ======================
+# ====================== CLI ======================
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Extract Lua binary features with optional wrapper-supplied metadata."
+        description="Extract Lua binary features (single-process, single Ghidra project)."
     )
     parser.add_argument("--list-only", action="store_true")
     parser.add_argument("--lua-version", default=None)
@@ -51,8 +45,9 @@ def parse_args():
     return parser.parse_args()
 
 
+# ====================== 경로 메타데이터 추출 ======================
 def get_binary_info(binary_path: Path):
-    if not binary_path.is_file() or binary_path.name.startswith('.'):
+    if not binary_path.is_file() or binary_path.name.startswith("."):
         return None, None, None, None
     parts = binary_path.parts
     try:
@@ -62,36 +57,27 @@ def get_binary_info(binary_path: Path):
         opt_level = next((p for p in parts if p.startswith("O")), "O0")
         strip_mode = next((p for p in parts if p in ("nostrip", "stripped")), None)
         return lua_version, arch, opt_level, strip_mode
-    except:
+    except Exception:
         return None, None, None, None
 
-# ====================== Pointer Trace ======================
-def trace_ptr(varnode, depth=0, visited=None, memo=None):
-    from ghidra.program.model.pcode import PcodeOp
+
+# ====================== 포인터 오프셋 추적 ======================
+def trace_ptr(PcodeOp, varnode, depth=0, visited=None, memo=None):
+    """Pcode 연산을 재귀적으로 따라가 상수 오프셋을 계산한다."""
     if varnode is None:
         return None
-
     if visited is None:
         visited = set()
-
     if memo is None:
         memo = {}
 
-    # 🔥 이미 계산된 경우 (성능 핵심)
     if varnode in memo:
         return memo[varnode]
-
-    # 🔥 depth 제한
-    if depth > 20:
-        return None
-
-    # 🔥 cycle 방지
-    if varnode in visited:
+    if depth > 20 or varnode in visited:
         return None
 
     visited.add(varnode)
 
-    # constant
     if varnode.isConstant():
         val = varnode.getOffset()
         memo[varnode] = val
@@ -103,82 +89,56 @@ def trace_ptr(varnode, depth=0, visited=None, memo=None):
         return None
 
     opcode = def_op.getOpcode()
-
     result = None
 
-    # ADD / PTRSUB
     if opcode in (PcodeOp.INT_ADD, PcodeOp.PTRSUB):
         offset = 0
         for inp in def_op.getInputs():
-            o = trace_ptr(inp, depth + 1, visited, memo)
+            o = trace_ptr(PcodeOp, inp, depth + 1, visited, memo)
             if o is not None:
                 offset += o
         result = offset
 
-    # MULT
     elif opcode == PcodeOp.INT_MULT:
         vals = []
         for inp in def_op.getInputs():
-            o = trace_ptr(inp, depth + 1, visited, memo)
+            o = trace_ptr(PcodeOp, inp, depth + 1, visited, memo)
             if o is not None:
                 vals.append(o)
         if len(vals) == 2:
             result = vals[0] * vals[1]
 
     else:
-        # fallback
         for inp in def_op.getInputs():
-            o = trace_ptr(inp, depth + 1, visited, memo)
+            o = trace_ptr(PcodeOp, inp, depth + 1, visited, memo)
             if o is not None:
                 result = o
                 break
 
     memo[varnode] = result
     return result
-    
-# 문자열 추출
-# -----------------------------
-def extract_strings(program, high_func):
-    listing = program.getListing()
-    addr_factory = program.getAddressFactory()
-    strings = set()
 
-    for op in high_func.getPcodeOps():
-        for inp in op.getInputs():
-            if inp.isConstant():
-                try:
-                    addr = addr_factory.getDefaultAddressSpace().getAddress(inp.getOffset())
-                    data = listing.getDataAt(addr)
 
-                    if data and data.hasStringValue():
-                        s = str(data.getValue()).lower()
-
-                        # 필터링
-                        if len(s) >= 4 and not s.isdigit():
-                            strings.add(s)
-
-                except:
-                    pass
-
-    return list(strings)
-
-# ====================== Feature Extraction ======================
-def extract_features_inside_program(currentProgram, lua_version, arch):
-    from ghidra.program.model.pcode import PcodeOp
-    from ghidra.program.model.block import BasicBlockModel
-    from ghidra.util.task import ConsoleTaskMonitor
-    from ghidra.app.decompiler import DecompInterface
-    
+# ====================== Feature 추출 ======================
+def extract_features(
+    currentProgram,
+    PcodeOp,
+    BasicBlockModel,
+    ConsoleTaskMonitor,
+    DecompInterface,
+    lua_version,
+    arch,
+):
     results = []
 
     fm = currentProgram.getFunctionManager()
     listing = currentProgram.getListing()
     ref_mgr = currentProgram.getReferenceManager()
+    addr_factory = currentProgram.getAddressFactory()
+    monitor = ConsoleTaskMonitor()
 
-    # 🔥 Decompiler
     iface = DecompInterface()
     iface.openProgram(currentProgram)
-    monitor = ConsoleTaskMonitor()
 
     def get_pcode_hist(function):
         hist = Counter()
@@ -186,10 +146,9 @@ def extract_features_inside_program(currentProgram, lua_version, arch):
         for instr in listing.getInstructions(function.getBody(), True):
             for p in instr.getPcode():
                 if p:
-                    op = PcodeOp.getMnemonic(p.getOpcode())
-                    hist[op] += 1
+                    hist[PcodeOp.getMnemonic(p.getOpcode())] += 1
                     total += 1
-        ratio = {k: round(v/total, 4) for k,v in hist.items()} if total else {}
+        ratio = {k: round(v / total, 4) for k, v in hist.items()} if total else {}
         return dict(hist), ratio, total
 
     def get_callees(function):
@@ -199,8 +158,9 @@ def extract_features_inside_program(currentProgram, lua_version, arch):
                 if p.getOpcode() == PcodeOp.CALL:
                     vn = p.getInput(0)
                     if vn.isAddress():
-                        addr = vn.getOffset()
-                        f = fm.getFunctionAt(currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(addr))
+                        f = fm.getFunctionAt(
+                            addr_factory.getDefaultAddressSpace().getAddress(vn.getOffset())
+                        )
                         if f:
                             callees.add(f.getName())
         return list(callees)
@@ -222,7 +182,7 @@ def extract_features_inside_program(currentProgram, lua_version, arch):
     all_funcs = [f for f in fm.getFunctions(True) if not f.isExternal() and not f.isThunk()]
     print(f"[INFO] extracting features from {len(all_funcs)} functions...")
 
-    for func in tqdm(all_funcs, desc="  decompile", unit="func", ncols=72):
+    for func in tqdm(all_funcs, desc="  decompile", unit="func", ncols=72, file=sys.stdout, mininterval=2.0):
         result = iface.decompileFunction(func, 60, monitor)
         high_func = result.getHighFunction()
 
@@ -236,116 +196,136 @@ def extract_features_inside_program(currentProgram, lua_version, arch):
             for op in high_func.getPcodeOps():
                 opcode = op.getOpcode()
 
-                # LOAD / STORE
+                # LOAD / STORE → struct offset 추적
                 if opcode in (PcodeOp.LOAD, PcodeOp.STORE):
-                    ptr = op.getInput(1)
-                    offset = trace_ptr(ptr, 0, set(), {})
-
+                    offset = trace_ptr(PcodeOp, op.getInput(1), 0, set(), {})
                     if offset is not None:
                         offset = int(offset)
                         offsets.append(offset)
-
                         if opcode == PcodeOp.LOAD:
                             read_count[offset] += 1
                         else:
                             write_count[offset] += 1
 
-                # compare
+                # 비교 연산 → compare_map
                 if opcode in (
                     PcodeOp.INT_EQUAL,
                     PcodeOp.INT_NOTEQUAL,
                     PcodeOp.INT_LESS,
-                    PcodeOp.INT_LESSEQUAL
+                    PcodeOp.INT_LESSEQUAL,
                 ):
                     const_val = None
                     ptr_node = None
-
                     for inp in op.getInputs():
                         if inp.isConstant():
                             const_val = inp.getOffset()
                         else:
                             ptr_node = inp
-
                     if const_val is not None and ptr_node is not None:
-                        offset = trace_ptr(ptr_node, 0, set(), {})
+                        offset = trace_ptr(PcodeOp, ptr_node, 0, set(), {})
                         if offset is not None:
                             compare_map[int(offset)].add(int(const_val))
 
-                # strings
+                # 상수 → 문자열 참조
                 for inp in op.getInputs():
                     if inp.isConstant():
                         try:
-                            addr = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(inp.getOffset())
+                            addr = addr_factory.getDefaultAddressSpace().getAddress(inp.getOffset())
                             data = listing.getDataAt(addr)
                             if data and data.hasStringValue():
                                 s = str(data.getValue()).lower()
                                 if len(s) >= 4:
                                     strings.add(s)
-                        except:
+                        except Exception:
                             pass
 
         unique_offsets = list(set(offsets))
-
         hist, ratio, pcount = get_pcode_hist(func)
 
         features = {
             "function_name": func.getName(),
             "entry_point": str(func.getEntryPoint()),
             "basic_block_count": get_bb(func),
-
-            # 기존
             "pcode_opcode_histogram": hist,
             "pcode_opcode_ratio": ratio,
             "pcode_instruction_count": pcount,
             "callees": get_callees(func),
             "callers": get_callers(func),
-
-            # 🔥 구조
             "struct_offsets": unique_offsets,
             "read_write": {
-                str(off): {
-                    "read": read_count[off],
-                    "write": write_count[off]
-                } for off in unique_offsets
+                str(off): {"read": read_count[off], "write": write_count[off]}
+                for off in unique_offsets
             },
-            "compare": {
-                str(off): list(vals)
-                for off, vals in compare_map.items()
-            },
+            "compare": {str(off): list(vals) for off, vals in compare_map.items()},
             "co_occurrence": list(itertools.combinations(unique_offsets, 2)),
-
-            # 🔥 의미
             "strings": list(strings),
-
             "lua_version": lua_version,
-            "architecture": arch
+            "architecture": arch,
         }
-
         results.append(features)
-    iface.dispose()
 
+    iface.dispose()
     return results
 
 
-
-# ====================== Worker ======================
-def process_binary(task):
+# ====================== 바이너리 이동 ======================
+def _move_to_processed(binary: Path, relative: Path) -> None:
     try:
-        import pyghidra
-        pyghidra.start()
+        dest = PROCESSED_DIR / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(binary), str(dest))
+    except Exception as e:
+        print(f"[WARN] move failed: {binary.name} — {e}")
 
-        from ghidra.program.model.pcode import PcodeOp
-        from ghidra.program.model.block import BasicBlockModel
-        from ghidra.util.task import ConsoleTaskMonitor
-        from ghidra.app.decompiler import DecompInterface
 
-        if isinstance(task, (list, tuple)):
-            binary_path_str, forced_meta = task
-        else:
-            binary_path_str, forced_meta = task, None
+# ====================== Main ======================
+def main():
+    args = parse_args()
 
-        binary = Path(binary_path_str)
+    forced_meta = None
+    if any([args.lua_version, args.architecture, args.opt_level, args.strip_mode]):
+        forced_meta = {
+            "lua_version": args.lua_version,
+            "architecture": args.architecture,
+            "opt_level": args.opt_level,
+            "strip_mode": args.strip_mode,
+        }
 
+    # 처리 대상 바이너리 수집
+    binaries: list[Path] = []
+    for lua_dir in sorted(BINARIES_DIR.glob("Lua_*")):
+        for arch_dir in sorted(lua_dir.glob("*")):
+            for opt_dir in sorted(arch_dir.glob("O*")):
+                for status_dir in sorted(opt_dir.glob("*")):
+                    if status_dir.name not in {"nostrip", "stripped"}:
+                        continue
+                    for binary in sorted(status_dir.glob("*")):
+                        if binary.is_file() and not binary.name.startswith("."):
+                            binaries.append(binary)
+
+    print(f"[INFO] Total binaries: {len(binaries)}")
+
+    if args.list_only:
+        for b in binaries:
+            print(b)
+        return
+
+    if not binaries:
+        print("[DONE] No binaries found. Exiting.")
+        sys.exit(10)
+
+    # ── Ghidra JVM 시작 (프로세스당 1회) ──────────────────────────────
+    import pyghidra
+    pyghidra.start()
+
+    from ghidra.program.model.pcode import PcodeOp
+    from ghidra.program.model.block import BasicBlockModel
+    from ghidra.util.task import ConsoleTaskMonitor
+    from ghidra.app.decompiler import DecompInterface
+
+    print(f"[{datetime.now()}] Ghidra ready — processing {len(binaries)} binary/binaries...")
+
+    for binary in binaries:
         lua_version, arch, opt_level, detected_strip_mode = get_binary_info(binary)
         if forced_meta:
             lua_version = forced_meta.get("lua_version") or lua_version
@@ -359,124 +339,69 @@ def process_binary(task):
             strip_mode = detected_strip_mode
 
         if not lua_version:
-            return f"[SKIP] invalid path: {binary.name}"
+            print(f"[SKIP] cannot determine metadata: {binary.name}")
+            continue
 
         relative = binary.relative_to(BINARIES_DIR)
-        parent_dir = relative.parent  # Lua_547/x86_64/O2/nostrip or stripped
+        parent_dir = relative.parent
         if not strip_mode:
             strip_mode = parent_dir.name
 
         output_dir = OUTPUT_BASE / parent_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Keep output filenames deployment-friendly.
-        # Metadata already lives in the directory structure and manifest, so
-        # the filename only needs a stable stem + timestamp.
-        output_pattern = f"{binary.stem}_*.json"
+        # 이미 처리된 바이너리 스킵
+        if list(output_dir.glob(f"{binary.stem}_*.json")):
+            print(f"[SKIP] already processed: {binary.name}")
+            _move_to_processed(binary, relative)
+            continue
 
-        # ✅ 이미 처리됨
-        if list(output_dir.glob(output_pattern)):
-            try:
-                relative = binary.relative_to(BINARIES_DIR)
-                dest = PROCESSED_DIR / relative
-
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(binary), str(dest))
-            except:
-                pass
-            return f"[SKIP] {binary.name}"
-
-        project_loc = PROJECT_BASE / f"{binary.stem}_{os.getpid()}"
+        project_loc = PROJECT_BASE / binary.stem
         project_name = f"Proj_{binary.stem}"
 
-        # 기존 프로젝트 제거
+        # 이전 실행에서 남은 프로젝트 정리
         if project_loc.exists():
             shutil.rmtree(project_loc, ignore_errors=True)
 
         print(f"[INFO] opening {binary.name} in Ghidra (auto-analysis may take a few minutes)...")
-        with pyghidra.open_program(
-            str(binary.absolute()),
-            project_location=str(project_loc),
-            project_name=project_name,
-            analyze=True
-        ) as flat_api:
-
-            currentProgram = flat_api.getCurrentProgram()
-            print(f"[INFO] Ghidra analysis done — starting feature extraction...")
-
-            time.sleep(3)
-
-            results = extract_features_inside_program(currentProgram, lua_version, arch)
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = output_dir / f"{binary.stem}_{timestamp}.json"
-
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(results, f, indent=2, ensure_ascii=False)
-
-        # 프로젝트 삭제
-        if project_loc.exists():
-            shutil.rmtree(project_loc, ignore_errors=True)
-
-        # binary 이동
         try:
-            relative = binary.relative_to(BINARIES_DIR)
-            dest = PROCESSED_DIR / relative
+            with pyghidra.open_program(
+                str(binary.absolute()),
+                project_location=str(project_loc),
+                project_name=project_name,
+                analyze=True,
+            ) as flat_api:
+                currentProgram = flat_api.getCurrentProgram()
+                print(f"[INFO] Ghidra analysis done — starting feature extraction...")
 
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(binary), str(dest))
+                results = extract_features(
+                    currentProgram,
+                    PcodeOp,
+                    BasicBlockModel,
+                    ConsoleTaskMonitor,
+                    DecompInterface,
+                    lua_version,
+                    arch,
+                )
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = output_dir / f"{binary.stem}_{timestamp}.json"
+                with open(output_path, "w", encoding="utf-8") as f:
+                    json.dump(results, f, indent=2, ensure_ascii=False)
+
+            print(f"[OK] {binary.name} → {len(results)} funcs → {output_path.name}")
+
         except Exception as e:
-            return f"[WARN] move failed: {e}"
+            print(f"[ERROR] {binary.name} — {e}")
 
-        return f"[OK] {binary.name} → {len(results)} funcs"
+        finally:
+            if project_loc.exists():
+                shutil.rmtree(project_loc, ignore_errors=True)
 
-    except Exception as e:
-        label = binary_path_str if 'binary_path_str' in dir() else repr(task)
-        return f"[ERROR] {label} - {e}"
-
-# ====================== Main ======================
-def main():
-    args = parse_args()
-    print(f"[{datetime.now()}] Multiprocessing start (workers={WORKERS})")
-
-    binaries = []
-    forced_meta = None
-    if any([args.lua_version, args.architecture, args.opt_level, args.strip_mode]):
-        forced_meta = {
-            "lua_version": args.lua_version,
-            "architecture": args.architecture,
-            "opt_level": args.opt_level,
-            "strip_mode": args.strip_mode,
-        }
-
-    for lua_dir in sorted(BINARIES_DIR.glob("Lua_*")):
-        for arch_dir in sorted(lua_dir.glob("*")):
-            for opt_dir in sorted(arch_dir.glob("O*")):
-                for status_dir in sorted(opt_dir.glob("*")):
-                    if status_dir.name not in {"nostrip", "stripped"}:
-                        continue
-                    for binary in sorted(status_dir.glob("*")):
-                        if binary.is_file() and not binary.name.startswith('.'):
-                            binaries.append((str(binary), forced_meta))
-
-    print(f"Total binaries: {len(binaries)}")
-
-    if len(binaries) == 0:
-        print("[DONE] No binaries left. Exiting.")
-        sys.exit(10)  # 🔥 특별한 종료 코드
-
-    if WORKERS == 1:
-        # Windows: JVM은 프로세스당 1개 → Pool 없이 직접 순차 실행
-        for task in binaries:
-            print(process_binary(task))
-    else:
-        with Pool(WORKERS) as pool:
-            for result in pool.imap_unordered(process_binary, binaries):
-                print(result)
+        _move_to_processed(binary, relative)
 
     print(f"\n[{datetime.now()}] All done.")
 
+
 if __name__ == "__main__":
-    import multiprocessing
-    multiprocessing.set_start_method("spawn", force=True)
     main()

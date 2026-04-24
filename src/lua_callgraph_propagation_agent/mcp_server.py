@@ -78,6 +78,46 @@ def _run_command(command: list[str]) -> dict[str, Any]:
     }
 
 
+@mcp.tool(
+    description=(
+        "Run ONLY the Ghidra feature extraction phase for a binary-input config. "
+        "Use this instead of pipeline_run when working with a binary target — "
+        "extraction and analysis must run in separate processes to avoid Ghidra JVM "
+        "and embedding model memory overlap. Call run_analysis after this completes."
+    )
+)
+def run_extraction(config_path: str, stop_on_error: bool = True) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        "scripts/10_run_name_mapping_pipeline.py",
+        "--config", str(_resolve_path(config_path)),
+        "--phase", "extraction",
+    ]
+    if stop_on_error:
+        command.append("--stop-on-error")
+    return _run_command(command)
+
+
+@mcp.tool(
+    description=(
+        "Run ONLY the analysis phase (retrieval → seed anchors → propagation → report) "
+        "for a binary-input config. Call this after run_extraction has fully completed "
+        "and the Ghidra JVM process has exited. "
+        "Also works with pre-extracted configs that have no extraction section."
+    )
+)
+def run_analysis(config_path: str, stop_on_error: bool = True) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        "scripts/10_run_name_mapping_pipeline.py",
+        "--config", str(_resolve_path(config_path)),
+        "--phase", "analysis",
+    ]
+    if stop_on_error:
+        command.append("--stop-on-error")
+    return _run_command(command)
+
+
 @mcp.tool(description="Resolve and preview the full name-mapping pipeline from one config JSON.")
 def pipeline_dry_run(config_path: str) -> dict[str, Any]:
     return _run_command(

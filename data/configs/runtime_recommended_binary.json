@@ -1,48 +1,32 @@
 {
   "pipeline_name": "runtime_recommended_binary",
-  "description": "Recommended default config for binary input. Only change the target binary and target metadata.",
-  "paths": {
-    "session_name": "recommended_binary_run",
-    "target_binary": "data/runtime/input/lua547_x86_64_O0_vanilla_demo",
-    "target_lua_version": "Lua_547",
-    "target_architecture": "x86_64",
-    "target_opt_level": "O0",
-    "target_strip_mode": "nostrip",
+  "description": "Config for binary input. Run extraction first (run_extraction), then analysis separately (run_analysis) to avoid Ghidra JVM / retrieval memory overlap.",
+  "session_name": "recommended_binary_run",
+  "extraction": {
+    "binary": "data/runtime/input/lua547_x86_64_O0_vanilla_demo",
+    "lua_version": "Lua_547",
+    "architecture": "x86_64",
+    "opt_level": "O0",
+    "strip_mode": "nostrip",
     "ghidra_home": "C:\\ghidra\\ghidra_12.0_PUBLIC\\ghidra_12.0_PUBLIC"
   },
-  "steps": {
-    "extract_query_features": {
-      "enabled": true
-    },
-    "bulk_retrieval": {
-      "enabled": true,
+  "analysis": {
+    "lua_version": "Lua_547",
+    "architecture": "x86_64",
+    "retrieval": {
       "candidate_pool": 100,
       "topk": 20,
-      "scoring_mode": "bonus_v2",
-      "mode": "runtime_query"
+      "scoring_mode": "bonus_v2"
     },
-    "select_seed_anchors": {
-      "enabled": true,
+    "seed_anchors": {
       "min_top1_score": 0.92,
       "min_margin": 0.05
     },
-    "build_runtime_suite": {
-      "enabled": true
-    },
-    "build_reference_db": {
-      "enabled": false,
-      "replace": false
-    },
     "propagation": {
-      "enabled": true
+      "iterative": true
     },
     "deferred_analysis": {
-      "enabled": true,
       "top_candidates": 5
-    },
-    "final_report": {
-      "enabled": true
     }
-  },
-  "external_steps": []
+  }
 }
