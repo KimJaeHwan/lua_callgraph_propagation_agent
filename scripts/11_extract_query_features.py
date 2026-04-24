@@ -227,6 +227,8 @@ def main() -> None:
         print(f"[INFO] JAVA_HOME: {java_home}")
         env["JAVA_HOME"] = java_home
     env["JAVA_TOOL_OPTIONS"] = f"-Duser.home={ghidra_user_home}"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
 
     cmd = [
         args.python_bin,
@@ -247,6 +249,8 @@ def main() -> None:
         cmd,
         cwd=work_dir,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         env=env,
     )
