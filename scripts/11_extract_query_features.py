@@ -144,16 +144,18 @@ def detect_ghidra_install_dir() -> str | None:
 
     elif sys.platform == "win32":
         search_roots = [
-            Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
             Path(r"C:\ghidra"),
             Path.home() / "ghidra",
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
         ]
         for root in search_roots:
             if not root.exists():
                 continue
             candidates = sorted(root.glob("ghidra_*"), reverse=True)
             for d in candidates:
-                if (d / "ghidraRun.bat").exists():
+                # Only accept installations that include the PyGhidra module
+                pyghidra_jar = d / "Ghidra" / "Features" / "PyGhidra" / "lib" / "PyGhidra.jar"
+                if (d / "ghidraRun.bat").exists() and pyghidra_jar.exists():
                     return str(d)
 
     else:

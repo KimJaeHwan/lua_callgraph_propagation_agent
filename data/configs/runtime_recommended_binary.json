@@ -8,7 +8,7 @@
     "target_architecture": "x86_64",
     "target_opt_level": "O0",
     "target_strip_mode": "nostrip",
-    "ghidra_home": ""
+    "ghidra_home": "C:\\ghidra\\ghidra_12.0_PUBLIC\\ghidra_12.0_PUBLIC"
   },
   "steps": {
     "extract_query_features": {

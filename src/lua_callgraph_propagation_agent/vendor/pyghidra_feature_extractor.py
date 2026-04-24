@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
+import platform
+from tqdm import tqdm
 from collections import Counter, defaultdict
 import itertools
 
@@ -28,7 +30,9 @@ PROCESSED_DIR = BASE_DIR / "processed_binaries"
 
 PROCESSED_DIR.mkdir(exist_ok=True)
 
-WORKERS = 8
+# Windows: pyghidra/JVM은 프로세스당 1개만 허용 → 단일 프로세스 순차 처리
+# macOS/Linux: multiprocessing Pool 사용 가능
+WORKERS = 1 if platform.system() == "Windows" else 8
 
 
 
@@ -215,10 +219,10 @@ def extract_features_inside_program(currentProgram, lua_version, arch):
         blocks = list(bb_model.getCodeBlocksContaining(function.getBody(), monitor))
         return len(blocks)
 
-    for func in fm.getFunctions(True):
-        if func.isExternal() or func.isThunk():
-            continue
+    all_funcs = [f for f in fm.getFunctions(True) if not f.isExternal() and not f.isThunk()]
+    print(f"[INFO] extracting features from {len(all_funcs)} functions...")
 
+    for func in tqdm(all_funcs, desc="  decompile", unit="func", ncols=72):
         result = iface.decompileFunction(func, 60, monitor)
         high_func = result.getHighFunction()
 
@@ -389,6 +393,7 @@ def process_binary(task):
         if project_loc.exists():
             shutil.rmtree(project_loc, ignore_errors=True)
 
+        print(f"[INFO] opening {binary.name} in Ghidra (auto-analysis may take a few minutes)...")
         with pyghidra.open_program(
             str(binary.absolute()),
             project_location=str(project_loc),
@@ -397,6 +402,7 @@ def process_binary(task):
         ) as flat_api:
 
             currentProgram = flat_api.getCurrentProgram()
+            print(f"[INFO] Ghidra analysis done — starting feature extraction...")
 
             time.sleep(3)
 
@@ -425,7 +431,8 @@ def process_binary(task):
         return f"[OK] {binary.name} → {len(results)} funcs"
 
     except Exception as e:
-        return f"[ERROR] {binary_path_str} - {e}"
+        label = binary_path_str if 'binary_path_str' in dir() else repr(task)
+        return f"[ERROR] {label} - {e}"
 
 # ====================== Main ======================
 def main():
@@ -458,9 +465,14 @@ def main():
         print("[DONE] No binaries left. Exiting.")
         sys.exit(10)  # 🔥 특별한 종료 코드
 
-    with Pool(WORKERS) as pool:
-        for result in pool.imap_unordered(process_binary, binaries):
-            print(result)
+    if WORKERS == 1:
+        # Windows: JVM은 프로세스당 1개 → Pool 없이 직접 순차 실행
+        for task in binaries:
+            print(process_binary(task))
+    else:
+        with Pool(WORKERS) as pool:
+            for result in pool.imap_unordered(process_binary, binaries):
+                print(result)
 
     print(f"\n[{datetime.now()}] All done.")
 
