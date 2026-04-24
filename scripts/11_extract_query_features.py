@@ -13,19 +13,21 @@ Why this wrapper exists:
 from __future__ import annotations
 
 import argparse
-import io
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-# Windows 터미널이 cp949일 때 UTF-8 출력이 깨지는 것을 방지
-if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-if sys.stderr.encoding and sys.stderr.encoding.lower() not in ("utf-8", "utf8"):
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+from platform_runtime import (
+    detect_java_home,
+    ensure_clean_dir,
+    normalize_stdio_utf8,
+    prepare_isolated_env,
+)
+
+
+normalize_stdio_utf8()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -63,135 +65,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-only", action="store_true")
     return parser.parse_args()
 
-
-def ensure_clean_dir(path: Path) -> None:
-    if path.exists():
-        if sys.platform == "win32":
-            # shutil.rmtree can fail on Windows when Ghidra lock files are held
-            # by a previous (crashed) process.  Use cmd /c rmdir /s /q as a
-            # robust fallback — it forces deletion of locked/read-only files.
-            import subprocess as _sp
-            result = _sp.run(
-                ["cmd", "/c", "rmdir", "/s", "/q", str(path)],
-                capture_output=True,
-            )
-            if result.returncode != 0 or path.exists():
-                # last resort: regular rmtree (may partially succeed)
-                try:
-                    shutil.rmtree(path, ignore_errors=True)
-                except Exception:
-                    pass
-        else:
-            shutil.rmtree(path)
-    path.mkdir(parents=True, exist_ok=True)
-
-
-def detect_java_home() -> str | None:
-    """Return JAVA_HOME by OS-specific discovery, or None if not found."""
-    # 1. Already set in environment
-    if os.environ.get("JAVA_HOME"):
-        return os.environ["JAVA_HOME"]
-
-    if sys.platform == "darwin":
-        # macOS: /usr/libexec/java_home -v 21 (or without version)
-        for args_candidate in (["/usr/libexec/java_home", "-v", "21"],
-                               ["/usr/libexec/java_home"]):
-            try:
-                result = subprocess.run(
-                    args_candidate, text=True, capture_output=True, check=True
-                )
-                value = result.stdout.strip()
-                if value:
-                    return value
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                continue
-
-    elif sys.platform == "win32":
-        # Windows: search common JDK install roots
-        search_roots = [
-            Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
-            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")),
-            Path(r"C:\Program Files\Eclipse Adoptium"),
-            Path(r"C:\Program Files\Microsoft"),
-            Path(r"C:\Program Files\Java"),
-        ]
-        for root in search_roots:
-            if not root.exists():
-                continue
-            # prefer JDK 21, then any JDK
-            candidates = sorted(root.glob("jdk-21*"), reverse=True) + \
-                         sorted(root.glob("jdk*"), reverse=True)
-            for jdk_dir in candidates:
-                java_exe = jdk_dir / "bin" / "java.exe"
-                if java_exe.exists():
-                    return str(jdk_dir)
-
-    else:
-        # Linux: use update-alternatives or JAVA_HOME convention
-        try:
-            result = subprocess.run(
-                ["update-java-alternatives", "-l"],
-                text=True, capture_output=True, check=True,
-            )
-            for line in result.stdout.splitlines():
-                parts = line.split()
-                if len(parts) >= 3:
-                    return parts[2]
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            pass
-        # fallback: resolve java from PATH
-        java_bin = shutil.which("java")
-        if java_bin:
-            # /usr/bin/java -> /etc/alternatives/java -> /usr/lib/jvm/...
-            real = Path(java_bin).resolve()
-            return str(real.parents[1])
-
-    return None
-
-
-def detect_ghidra_install_dir() -> str | None:
-    """Search for a Ghidra installation directory by OS convention."""
-    if sys.platform == "darwin":
-        # Homebrew versioned paths
-        homebrew_cellar = Path("/opt/homebrew/Cellar/ghidra")
-        if homebrew_cellar.exists():
-            versions = sorted(homebrew_cellar.iterdir(), reverse=True)
-            for v in versions:
-                candidate = v / "libexec"
-                if (candidate / "ghidraRun").exists():
-                    return str(candidate)
-        # Non-Homebrew: /Applications or arbitrary
-        for candidate in [Path("/Applications/ghidra"), Path.home() / "ghidra"]:
-            if candidate.exists():
-                return str(candidate)
-
-    elif sys.platform == "win32":
-        search_roots = [
-            Path(r"C:\ghidra"),
-            Path.home() / "ghidra",
-            Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
-        ]
-        for root in search_roots:
-            if not root.exists():
-                continue
-            candidates = sorted(root.glob("ghidra_*"), reverse=True)
-            for d in candidates:
-                # Only accept installations that include the PyGhidra module
-                pyghidra_jar = d / "Ghidra" / "Features" / "PyGhidra" / "lib" / "PyGhidra.jar"
-                if (d / "ghidraRun.bat").exists() and pyghidra_jar.exists():
-                    return str(d)
-
-    else:
-        for candidate in [Path("/opt/ghidra"), Path.home() / "ghidra"]:
-            candidates = sorted(candidate.parent.glob("ghidra_*"), reverse=True) \
-                if candidate == Path("/opt/ghidra") else [candidate]
-            for d in candidates:
-                if (d / "ghidraRun").exists():
-                    return str(d)
-
-    return None
-
-
 def main() -> None:
     args = parse_args()
     binary = Path(args.binary).resolve()
@@ -207,52 +80,20 @@ def main() -> None:
     binaries_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(binary, binaries_dir / binary.name)
 
-    # Match the successful lua_extract_feature_ghidra flow more closely:
-    # keep Ghidra state inside the runtime workspace instead of letting
-    # pyghidra write under ~/Library/ghidra where sandboxed execution may fail.
-    ghidra_user_home = work_dir / ".ghidra_user_home"
-    ghidra_user_home.mkdir(parents=True, exist_ok=True)
-    ghidra_tmp = work_dir / ".ghidra_tmp"
-    ghidra_tmp.mkdir(parents=True, exist_ok=True)
-
-    env = os.environ.copy()
-
-    # ── Temp / home isolation (cross-platform) ──────────────────────────────
-    if sys.platform == "win32":
-        env["USERPROFILE"] = str(ghidra_user_home)
-        env["APPDATA"] = str(ghidra_user_home / "AppData" / "Roaming")
-        env["LOCALAPPDATA"] = str(ghidra_user_home / "AppData" / "Local")
-    else:
-        env["HOME"] = str(ghidra_user_home)
-        env["TMPDIR"] = str(ghidra_tmp)
-    env["TMP"] = str(ghidra_tmp)
-    env["TEMP"] = str(ghidra_tmp)
-
-    # ── Ghidra install dir ───────────────────────────────────────────────────
-    ghidra_install_dir = (
-        args.ghidra_home                        # 1. CLI arg
-        or env.get("GHIDRA_INSTALL_DIR")        # 2. env var already set
-        or env.get("GHIDRA_HOME")               # 3. alt env var
-        or detect_ghidra_install_dir()          # 4. OS-specific search
-    )
-    if not ghidra_install_dir:
-        raise SystemExit(
-            "[ERROR] Ghidra installation not found.\n"
-            "  Set GHIDRA_INSTALL_DIR environment variable or pass --ghidra-home."
+    try:
+        env, ghidra_user_home, _ghidra_tmp = prepare_isolated_env(
+            work_dir=work_dir,
+            ghidra_home_override=args.ghidra_home,
         )
-    print(f"[INFO] GHIDRA_INSTALL_DIR: {ghidra_install_dir}")
-    env["GHIDRA_HOME"] = ghidra_install_dir
-    env["GHIDRA_INSTALL_DIR"] = ghidra_install_dir
+    except RuntimeError as exc:
+        raise SystemExit(f"[ERROR] {exc}") from exc
 
-    # ── Java home ────────────────────────────────────────────────────────────
+    ghidra_install_dir = env["GHIDRA_INSTALL_DIR"]
+    print(f"[INFO] GHIDRA_INSTALL_DIR: {ghidra_install_dir}")
+
     java_home = detect_java_home()
     if java_home:
         print(f"[INFO] JAVA_HOME: {java_home}")
-        env["JAVA_HOME"] = java_home
-    env["JAVA_TOOL_OPTIONS"] = f"-Duser.home={ghidra_user_home}"
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUTF8"] = "1"
-    env["PYTHONUNBUFFERED"] = "1"
 
     cmd = [
         args.python_bin,

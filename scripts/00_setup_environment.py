@@ -35,9 +35,13 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from platform_runtime import normalize_stdio_utf8, resolve_venv_python
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GITHUB_REPO = "KimJaeHwan/lua_callgraph_propagation_agent"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+normalize_stdio_utf8()
 
 
 def run(cmd: list[str], desc: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -199,14 +203,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-
-    if args.venv:
-        if sys.platform == "win32":
-            python = str(args.venv / "Scripts" / "python.exe")
-        else:
-            python = str(args.venv / "bin" / "python")
-    else:
-        python = sys.executable
+    python = resolve_venv_python(args.venv)
 
     print(f"[SETUP] Python: {python}")
     print(f"[SETUP] Project root: {PROJECT_ROOT}")
