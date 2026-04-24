@@ -66,7 +66,23 @@ def parse_args() -> argparse.Namespace:
 
 def ensure_clean_dir(path: Path) -> None:
     if path.exists():
-        shutil.rmtree(path)
+        if sys.platform == "win32":
+            # shutil.rmtree can fail on Windows when Ghidra lock files are held
+            # by a previous (crashed) process.  Use cmd /c rmdir /s /q as a
+            # robust fallback — it forces deletion of locked/read-only files.
+            import subprocess as _sp
+            result = _sp.run(
+                ["cmd", "/c", "rmdir", "/s", "/q", str(path)],
+                capture_output=True,
+            )
+            if result.returncode != 0 or path.exists():
+                # last resort: regular rmtree (may partially succeed)
+                try:
+                    shutil.rmtree(path, ignore_errors=True)
+                except Exception:
+                    pass
+        else:
+            shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
 
 

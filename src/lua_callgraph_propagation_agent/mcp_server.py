@@ -91,7 +91,13 @@ def run_analysis(config_path: str, stop_on_error: bool = True) -> dict[str, Any]
     return _run_command(command)
 
 
-@mcp.tool(description="Resolve and preview the full name-mapping pipeline from one config JSON.")
+@mcp.tool(
+    description=(
+        "Resolve and preview the full name-mapping pipeline steps from one config JSON "
+        "without actually running them. Prints each command that would be executed. "
+        "Useful for verifying paths and step order before committing to a full run."
+    )
+)
 def pipeline_dry_run(config_path: str) -> dict[str, Any]:
     return _run_command(
         [
@@ -104,7 +110,15 @@ def pipeline_dry_run(config_path: str) -> dict[str, Any]:
     )
 
 
-@mcp.tool(description="Run the full deterministic name-mapping pipeline from one config JSON.")
+@mcp.tool(
+    description=(
+        "Run the full deterministic name-mapping pipeline from one config JSON. "
+        "WARNING: only use this for pre-extracted configs (no binary field). "
+        "For binary targets use run_extraction first, then run_analysis — "
+        "running both phases together in one process causes Ghidra JVM and "
+        "embedding model memory to overlap and will likely OOM."
+    )
+)
 def pipeline_run(config_path: str, stop_on_error: bool = False) -> dict[str, Any]:
     command = [
         sys.executable,
@@ -117,7 +131,20 @@ def pipeline_run(config_path: str, stop_on_error: bool = False) -> dict[str, Any
     return _run_command(command)
 
 
-@mcp.tool(description="Extract query features for one target binary into the runtime workspace.")
+@mcp.tool(
+    description=(
+        "Extract Ghidra/pyghidra features from one target binary into the runtime workspace. "
+        "Runs scripts/11_extract_query_features.py as a subprocess so Ghidra JVM is fully "
+        "isolated — call run_analysis only after this tool returns. "
+        "binary: absolute path to the .so or ELF binary. "
+        "lua_version: e.g. 'Lua_547', 'Lua_536'. "
+        "architecture: 'x86_64' or 'aarch64'. "
+        "opt_level: compiler optimisation level, e.g. 'O0', 'O2'. "
+        "strip_mode: 'stripped' for production binaries with no debug symbols, "
+        "'nostrip' for debug/test builds. "
+        "Output manifest is written to data/runtime/query_features/<session_name>/extract_manifest.json."
+    )
+)
 def extract_query_features(
     binary: str,
     lua_version: str,
@@ -146,7 +173,18 @@ def extract_query_features(
     )
 
 
-@mcp.tool(description="Run hybrid retrieval for all functions from one extracted feature manifest or JSON.")
+@mcp.tool(
+    description=(
+        "Run hybrid (embedding + graph) retrieval for every function in an extracted feature set "
+        "against a versioned reference index. Produces a ranked top-k list per function. "
+        "Provide either extract_manifest (path to extract_manifest.json from extract_query_features) "
+        "or query_json (path to a raw feature JSON list). "
+        "index: path to the retrieval index directory, e.g. "
+        "'data/inputs/retrieval_indexes/Lua_547/x86_64/runtime'. "
+        "scoring_mode: 'bonus_v2' is recommended. "
+        "output_json: where to write retrieval_result.json."
+    )
+)
 def bulk_query_retrieval(
     index: str,
     output_json: str,
@@ -178,7 +216,16 @@ def bulk_query_retrieval(
 
 
 
-@mcp.tool(description="List all deferred and conflict cases from the final mapping report for triage.")
+@mcp.tool(
+    description=(
+        "List all deferred and conflict cases from the final mapping report for analyst triage. "
+        "Deferred cases had no confident top-1 prediction; conflict cases had competing predictions "
+        "that the propagation graph could not resolve. "
+        "Use this to decide which functions to inspect in IDA/Ghidra and resolve via "
+        "register_force_anchor or batch_register_force_anchors. "
+        "report_json: path to final_mapping_report.json."
+    )
+)
 def list_deferred_cases(report_json: str) -> dict[str, Any]:
     path = _resolve_path(report_json)
     with open(path, "r", encoding="utf-8") as f:
@@ -208,7 +255,14 @@ def list_deferred_cases(report_json: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool(description="Read one final mapping report and return its summary plus a small accepted/deferred/conflict preview.")
+@mcp.tool(
+    description=(
+        "Read one final mapping report and return its summary (accepted/deferred/conflict counts) "
+        "plus a small preview (up to 5 entries) of each bucket. "
+        "Use this for a quick sanity check after run_analysis or run_downstream completes. "
+        "report_json: path to final_mapping_report.json."
+    )
+)
 def read_final_report(report_json: str) -> dict[str, Any]:
     path = _resolve_path(report_json)
     with open(path, "r", encoding="utf-8") as f:
@@ -222,7 +276,14 @@ def read_final_report(report_json: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool(description="Read one mapping record from the final mapping report by case_id for reverse validation and follow-up analysis.")
+@mcp.tool(
+    description=(
+        "Read one mapping record from the final mapping report by case_id for deep inspection. "
+        "case_id format is '<function_name>@<hex_address>', e.g. 'sub_401234@00401234'. "
+        "Returns the full record including retrieval scores, graph evidence, and status reasons. "
+        "Useful for reverse-validating an accepted mapping or understanding why a case was deferred."
+    )
+)
 def read_mapping_record(report_json: str, case_id: str) -> dict[str, Any]:
     path = _resolve_path(report_json)
     with open(path, "r", encoding="utf-8") as f:

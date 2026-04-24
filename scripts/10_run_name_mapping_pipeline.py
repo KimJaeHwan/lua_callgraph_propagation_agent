@@ -45,6 +45,14 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "data" / "configs" / "runtime_recommended_preextracted.json"
 
+# ── Windows cp949 stdout fix ──────────────────────────────────────────────────
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf-8-sig"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except AttributeError:
+        pass
+
 # config_loader는 같은 scripts/ 폴더에 있으므로 경로 추가 후 import
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config_loader import load_config, is_new_format as _new_format, resolve_paths as _cl_resolve_paths  # noqa: E402

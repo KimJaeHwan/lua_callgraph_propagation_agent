@@ -1,142 +1,145 @@
 # Lua Callgraph Propagation Agent
 
-`lua_callgraph_propagation_agent`는 Lua 함수 name mapping을 실제로 수행하는 단일 레포 런타임이다.  
-이 레포는 다음 단계를 한 곳에서 연결한다.
+`lua_callgraph_propagation_agent`는 stripped ELF 바이너리에 임베딩된 Lua 함수 이름을 자동으로 복원하는 단일 레포 런타임이다.
+
+다음 단계를 한 곳에서 연결한다.
 
 - query binary 또는 pre-extracted feature 입력
-- hybrid retrieval top-k 생성
-- callgraph 기반 seed anchor 선택
+- Ghidra/pyghidra 기반 feature 추출 (callgraph, 상수, 문자열 참조)
+- hybrid retrieval top-k 생성 (embedding + graph 결합 scoring)
+- callgraph 기반 seed anchor 선택 (name_visible + retrieval_high_confidence)
 - iterative propagation / conflict / deferred 분류
 - deferred 분석 payload 생성
 - FastMCP 서버로 analyst 개입용 tool interface 제공
 
-연구 단계에서 쓰였던 sibling repository는 여전히 데이터 생성 이력으로 남아 있지만, 실제 운용 경로는 이 레포 안에 복사된 runtime asset을 기준으로 정리한다.
+## 런타임 구성
 
-## 현재 런타임 구성
-
-- vendored extractor: [src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py)
-- vendored retrieval engine: [src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py)
-- pipeline entrypoint: [scripts/10_run_name_mapping_pipeline.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/10_run_name_mapping_pipeline.py)
-- FastMCP server: [scripts/20_run_mcp_server.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/20_run_mcp_server.py)
-- runtime asset bootstrap: [scripts/21_prepare_runtime_assets.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/21_prepare_runtime_assets.py)
+| 역할 | 경로 |
+|------|------|
+| Ghidra feature extractor | `src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py` |
+| hybrid retrieval engine | `src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py` |
+| 파이프라인 참조용 진입점 | `scripts/10_run_name_mapping_pipeline.py` (**직접 실행 비권장** — 메모리 이슈 참고) |
+| FastMCP 서버 | `scripts/20_run_mcp_server.py` |
+| config 경로 통합 | `scripts/config_loader.py` |
 
 핵심 입력 위치:
 
-- reference features: `data/inputs/reference_features/`
-- versioned reference DB: `data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite`
-- versioned runtime retrieval index: `data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime`
-- sample binaries: `data/runtime/input/`
-- optional pre-extracted query feature: `data/inputs/query_features/`
+- reference callgraph DB: `data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite`
+- versioned retrieval index: `data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime`
+- 실행 결과: `data/runtime/results/<session_name>/`
 
 ## Quick Start
 
-처음 한 번 runtime asset을 준비한다.
+### 1. pre-extracted feature로 분석 (가장 빠른 경로)
 
 ```bash
-../lua_llm/bin/python scripts/21_prepare_runtime_assets.py --force
+python scripts/12_run_bulk_query_retrieval.py \
+  --extract-manifest data/runtime/query_features/<session>/extract_manifest.json \
+  --index data/inputs/retrieval_indexes/Lua_547/x86_64/runtime \
+  --output-json data/runtime/results/<session>/retrieval_result.json
+
+python scripts/13_select_seed_anchors.py \
+  --retrieval-json data/runtime/results/<session>/retrieval_result.json \
+  --output-json data/runtime/results/<session>/seed_anchors.json \
+  --query-json data/runtime/query_features/<session>/extract_manifest.json \
+  --reference-db data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite
+
+# ... 이하 14, 04, 15 스크립트 순서대로
 ```
 
-이 단계가 끝나면 다음이 이 레포 안에 준비된다.
+### 2. 새 바이너리 분석 전체 경로
 
-- Lua 5.4.7 vanilla reference feature 세트
-- sample binary
-- sample query feature JSON
-
-기본 실행은 이 레포 안에 복사된 full retrieval index를 사용한다.
-
-- 현재 기본 index: `data/inputs/retrieval_indexes/Lua_547/x86_64/runtime`
-- 현재 기본 reference DB: `data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite`
-- 즉, 파이프라인 실행 시 sibling repository 경로를 직접 참조하지 않아도 된다.
-- 이후 Lua 5.3/5.2가 들어오면 같은 규칙으로 `Lua_536`, `Lua_524` 디렉터리를 추가하면 된다.
-
-## 검증된 실행 경로
-
-현재 이 레포에서 끝까지 검증된 경로는 pre-extracted query feature 기준이다.
+**Ghidra JVM과 embedding 모델은 메모리가 겹치므로 반드시 분리 실행한다.**
 
 ```bash
-../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_recommended_preextracted.json \
-  --stop-on-error
+# Step 1: feature 추출 (Ghidra 프로세스 단독 실행)
+python scripts/11_extract_query_features.py \
+  --binary /path/to/target.so \
+  --lua-version Lua_547 \
+  --architecture x86_64 \
+  --strip-mode stripped \
+  --session-name my_session \
+  --output-root data/runtime/query_features \
+  --work-root data/runtime/extractor_workspace \
+  --extractor-script src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py \
+  --ghidra-home /path/to/ghidra
+
+# Step 2: 분석 (Ghidra 완전 종료 후)
+python scripts/12_run_bulk_query_retrieval.py ...
+python scripts/13_select_seed_anchors.py ...
+python scripts/14_build_runtime_propagation_suite.py ...
+python scripts/04_propagate_from_anchors.py --iterative ...
+python scripts/15_export_final_mapping_report.py ...
 ```
 
-이 실행은 실제로 완료되었고, 결과는 다음 위치에 생성된다.
+또는 MCP 서버를 통해 `run_extraction` → `run_analysis` 순서로 호출한다.
 
-- retrieval: `data/runtime/results/recommended_preextracted_run/retrieval_result.json`
-- propagation: `data/runtime/results/recommended_preextracted_run/propagation_result.json`
-- deferred analysis: `data/runtime/results/recommended_preextracted_run/deferred_analysis.json`
-- final report: `data/runtime/results/recommended_preextracted_run/final_mapping_report.json`
+## 메모리 이슈 주의
 
-샘플 실행 결과 요약:
+`scripts/10_run_name_mapping_pipeline.py`는 extraction + analysis를 하나의 프로세스에서 순서대로 실행하는 참조용 스크립트다. Ghidra JVM과 embedding 모델이 메모리를 동시에 점유하면 OOM이 발생할 수 있으므로, **실제 binary 분석에서는 10번 스크립트를 직접 사용하지 않는다.**
 
-- total cases: `1095`
-- accepted: `1006`
-- deferred: `77`
-- conflict: `12`
-
-## Binary Extraction 경로
-
-binary에서 바로 feature를 뽑는 설정도 포함되어 있다.
+## FastMCP 서버
 
 ```bash
-../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_recommended_binary.json \
-  --stop-on-error
+python scripts/20_run_mcp_server.py
 ```
 
-현재는 runtime wrapper가 `pyghidra` / `Ghidra` 환경을 더 보수적으로 맞추도록 보정되어, 실제 processed binary 대상 extraction smoke test와 MCP 경유 extraction 생성까지 확인했다.
+### 제공 툴 목록
 
-정리 문서:
+#### 파이프라인 실행
 
-- [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
+| 툴 | 설명 |
+|----|------|
+| `run_extraction` | config 기반 Ghidra feature 추출 (binary config 전용) |
+| `run_analysis` | config 기반 retrieval → seed anchors → propagation → report |
+| `pipeline_run` | pre-extracted config 전용 전체 파이프라인 (binary 대상 사용 금지) |
+| `pipeline_dry_run` | 실행 없이 파이프라인 명령 미리 확인 |
+| `extract_query_features` | 단일 바이너리 Ghidra feature 추출 |
+| `bulk_query_retrieval` | feature manifest → retrieval top-k 생성 |
 
-다만 대규모 real-binary case는 extraction 이후 retrieval / propagation이 오래 걸릴 수 있으므로, 현재는 pre-extracted config가 가장 빠른 검증 경로다.
+#### 결과 조회
 
-현재 Git에 포함되는 공식 config는 아래 두 개만 유지한다.
+| 툴 | 설명 |
+|----|------|
+| `read_final_report` | 최종 보고서 summary + preview |
+| `read_mapping_record` | case_id 기준 단일 매핑 레코드 조회 |
+| `read_propagation_summary` | propagation 중간 결과 요약 (deferred/conflict 전체 목록) |
+| `list_deferred_cases` | deferred + conflict 케이스 triage 목록 |
 
-- [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
-- [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
+#### anchor 관리
 
-그 외 실험/평가용 config는 로컬 재현용으로만 유지하고 Git에는 올리지 않는다.
+| 툴 | 설명 |
+|----|------|
+| `register_force_anchor` | IDA 분석으로 확정된 단일 매핑 등록 후 propagation 재실행 |
+| `batch_register_force_anchors` | 여러 확정 매핑을 한 번에 등록 (downstream 1회만 실행) |
+| `run_downstream` | seed_anchors.json을 건드리지 않고 build_suite → propagation → report만 재실행 |
 
-## FastMCP
+### 전형적인 워크플로우
 
-이 레포는 FastMCP 기반 stdio 서버를 제공한다.
-
-실행:
-
-```bash
-../lua_llm/bin/python scripts/20_run_mcp_server.py
 ```
-
-현재 주요 tool:
-
-- `pipeline_dry_run`
-- `pipeline_run`
-- `extract_query_features`
-- `bulk_query_retrieval`
-- `list_deferred_cases`
-- `register_force_anchor`
-- `read_final_report`
-- `read_mapping_record`
-
-FastMCP 클라이언트 기준으로 `bulk_query_retrieval`, `read_final_report`, `read_mapping_record`, 그리고 실제 binary extraction을 포함한 `pipeline_run` 경로까지 점검했다.
+1. run_extraction          → Ghidra로 feature 추출
+2. run_analysis            → retrieval + propagation 전체 실행
+3. read_final_report       → 결과 확인 (accepted/deferred/conflict 수)
+4. list_deferred_cases     → deferred/conflict 케이스 목록 확인
+5. (IDA로 deferred 케이스 decompile 분석)
+6. batch_register_force_anchors → 확정 매핑 일괄 등록 + propagation 재실행
+7. read_final_report       → 최종 결과 재확인
+```
 
 ## Retrieval Index 정책
 
 기본 정책은 full index를 내부 복사본으로 유지하는 것이다.
 
-- slim 실험에서는 index 크기를 크게 줄일 수 있었지만 정확도가 유의미하게 떨어졌다.
-- 그래서 runtime은 slim이 아니라 full index를 채택했다.
-- 다만 실제 운용 편의성을 위해 full index 자체를 이 레포 안으로 복사해서 사용한다.
-- slim 정책과 실험 결과는 `lua_function_embedding` 쪽 문서로 남겨 두었다.
+- slim 실험에서 index 크기를 줄일 수 있었지만 정확도가 유의미하게 떨어졌다.
+- runtime은 full index를 채택한다.
+- 현재 제공 버전: `Lua_547` (x86_64, aarch64), stub: `Lua_536`, `Lua_524`
+- 새 버전 추가 시 동일 규칙으로 `data/inputs/retrieval_indexes/<version>/` 디렉터리를 추가하면 된다.
 
-## 남겨둔 문서
+## 관련 문서
 
-- [docs/input_schema.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/input_schema.md)
-- [docs/callgraph_propagation_agent_design.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/callgraph_propagation_agent_design.md)
-- [docs/callgraph_store_design.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/callgraph_store_design.md)
-- [docs/mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
-- [docs/extraction_runtime_environment.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/extraction_runtime_environment.md)
-- [docs/runtime_validation_and_configs.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/runtime_validation_and_configs.md)
-- [docs/config_field_reference.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/config_field_reference.md)
-- [docs/release_assets.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/release_assets.md)
+- [docs/mcp_runtime.md](docs/mcp_runtime.md) — MCP 툴 상세 설명
+- [docs/input_schema.md](docs/input_schema.md) — feature JSON 스키마
+- [docs/config_field_reference.md](docs/config_field_reference.md) — config 필드 레퍼런스
+- [docs/extraction_runtime_environment.md](docs/extraction_runtime_environment.md) — Ghidra 환경 설정
+- [docs/callgraph_propagation_agent_design.md](docs/callgraph_propagation_agent_design.md) — 설계 문서
+- [docs/runtime_validation_and_configs.md](docs/runtime_validation_and_configs.md) — 검증 이력
