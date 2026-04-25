@@ -23,7 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = PROJECT_ROOT.parent
 
 DEFAULT_REFERENCE_ROOT = WORKSPACE_ROOT / "lua_extract_feature_ghidra" / "outputs_vanilla"
-DEFAULT_SOURCE_INDEX = WORKSPACE_ROOT / "lua_function_embedding" / "data" / "indexes" / "lua547_x86_bge"
+DEFAULT_SOURCE_INDEX = WORKSPACE_ROOT / "lua_function_embedding" / "data" / "indexes" / "lua_547_x86_64_bge"
 DEFAULT_SAMPLE_BINARY = (
     WORKSPACE_ROOT
     / "lua_custom_engine_generator"
