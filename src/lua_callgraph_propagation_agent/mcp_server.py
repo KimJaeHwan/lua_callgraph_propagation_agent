@@ -22,9 +22,19 @@ def _default_runtime_paths(config: dict) -> dict[str, Any]:
 mcp = FastMCP(
     name="lua-callgraph-propagation-agent",
     instructions=(
-        "Run the deterministic Lua name-mapping runtime pipeline for analysis targets, "
-        "inspect final mapping reports, and register force anchors when decompile analysis "
-        "reveals a confident mapping for deferred cases."
+        "Use this MCP to drive the deterministic Lua runtime name-mapping workflow with "
+        "phase-separated execution only. Do not rely on scripts/10_run_name_mapping_pipeline.py "
+        "from MCP, because extraction and analysis must stay split to avoid Ghidra JVM and "
+        "embedding-model memory overlap. Preferred analyst loop: "
+        "(1) extract features with extract_query_features when starting from a binary; "
+        "(2) run retrieval and seed/propagation steps explicitly or inspect existing results; "
+        "(3) inspect results with read_final_report, list_deferred_cases, "
+        "read_mapping_record, read_propagation_summary, or show_candidate_context; "
+        "(4) after manual decompile validation, register_force_anchor or "
+        "batch_register_force_anchors; "
+        "(5) if anchors were edited manually, call run_downstream. "
+        "Prefer batch_register_force_anchors over repeated single-anchor calls when several "
+        "mappings were confirmed in one reverse-engineering session."
     ),
     version="0.4.0",
 )
@@ -53,96 +63,17 @@ def _run_command(command: list[str]) -> dict[str, Any]:
 
 @mcp.tool(
     description=(
-        "Run ONLY the Ghidra feature extraction phase for a binary-input config. "
-        "Use this instead of pipeline_run when working with a binary target — "
-        "extraction and analysis must run in separate processes to avoid Ghidra JVM "
-        "and embedding model memory overlap. Call run_analysis after this completes."
-    )
-)
-def run_extraction(config_path: str, stop_on_error: bool = True) -> dict[str, Any]:
-    command = [
-        sys.executable,
-        "scripts/10_run_name_mapping_pipeline.py",
-        "--config", str(_resolve_path(config_path)),
-        "--phase", "extraction",
-    ]
-    if stop_on_error:
-        command.append("--stop-on-error")
-    return _run_command(command)
-
-
-@mcp.tool(
-    description=(
-        "Run ONLY the analysis phase (retrieval → seed anchors → propagation → report) "
-        "for a binary-input config. Call this after run_extraction has fully completed "
-        "and the Ghidra JVM process has exited. "
-        "Also works with pre-extracted configs that have no extraction section."
-    )
-)
-def run_analysis(config_path: str, stop_on_error: bool = True) -> dict[str, Any]:
-    command = [
-        sys.executable,
-        "scripts/10_run_name_mapping_pipeline.py",
-        "--config", str(_resolve_path(config_path)),
-        "--phase", "analysis",
-    ]
-    if stop_on_error:
-        command.append("--stop-on-error")
-    return _run_command(command)
-
-
-@mcp.tool(
-    description=(
-        "Resolve and preview the full name-mapping pipeline steps from one config JSON "
-        "without actually running them. Prints each command that would be executed. "
-        "Useful for verifying paths and step order before committing to a full run."
-    )
-)
-def pipeline_dry_run(config_path: str) -> dict[str, Any]:
-    return _run_command(
-        [
-            sys.executable,
-            "scripts/10_run_name_mapping_pipeline.py",
-            "--config",
-            str(_resolve_path(config_path)),
-            "--dry-run",
-        ]
-    )
-
-
-@mcp.tool(
-    description=(
-        "Run the full deterministic name-mapping pipeline from one config JSON. "
-        "WARNING: only use this for pre-extracted configs (no binary field). "
-        "For binary targets use run_extraction first, then run_analysis — "
-        "running both phases together in one process causes Ghidra JVM and "
-        "embedding model memory to overlap and will likely OOM."
-    )
-)
-def pipeline_run(config_path: str, stop_on_error: bool = False) -> dict[str, Any]:
-    command = [
-        sys.executable,
-        "scripts/10_run_name_mapping_pipeline.py",
-        "--config",
-        str(_resolve_path(config_path)),
-    ]
-    if stop_on_error:
-        command.append("--stop-on-error")
-    return _run_command(command)
-
-
-@mcp.tool(
-    description=(
         "Extract Ghidra/pyghidra features from one target binary into the runtime workspace. "
         "Runs scripts/11_extract_query_features.py as a subprocess so Ghidra JVM is fully "
-        "isolated — call run_analysis only after this tool returns. "
+        "isolated. This MCP intentionally does not expose scripts/10_run_name_mapping_pipeline.py. "
         "binary: absolute path to the .so or ELF binary. "
         "lua_version: e.g. 'Lua_547', 'Lua_536'. "
         "architecture: 'x86_64' or 'aarch64'. "
         "opt_level: compiler optimisation level, e.g. 'O0', 'O2'. "
         "strip_mode: 'stripped' for production binaries with no debug symbols, "
         "'nostrip' for debug/test builds. "
-        "Output manifest is written to data/runtime/query_features/<session_name>/extract_manifest.json."
+        "Output manifest is written to data/runtime/query_features/<session_name>/extract_manifest.json. "
+        "Use this when the caller wants direct parameter control instead of config-driven execution."
     )
 )
 def extract_query_features(
@@ -182,7 +113,8 @@ def extract_query_features(
         "index: path to the retrieval index directory, e.g. "
         "'data/inputs/retrieval_indexes/Lua_547/x86_64/runtime'. "
         "scoring_mode: 'bonus_v2' is recommended. "
-        "output_json: where to write retrieval_result.json."
+        "output_json: where to write retrieval_result.json. "
+        "Use this for retrieval-only experiments or benchmarking without running full propagation."
     )
 )
 def bulk_query_retrieval(
@@ -223,7 +155,8 @@ def bulk_query_retrieval(
         "that the propagation graph could not resolve. "
         "Use this to decide which functions to inspect in IDA/Ghidra and resolve via "
         "register_force_anchor or batch_register_force_anchors. "
-        "report_json: path to final_mapping_report.json."
+        "report_json: path to final_mapping_report.json. "
+        "Good first triage tool when the user asks 'what should we inspect next?'."
     )
 )
 def list_deferred_cases(report_json: str) -> dict[str, Any]:
@@ -259,8 +192,9 @@ def list_deferred_cases(report_json: str) -> dict[str, Any]:
     description=(
         "Read one final mapping report and return its summary (accepted/deferred/conflict counts) "
         "plus a small preview (up to 5 entries) of each bucket. "
-        "Use this for a quick sanity check after run_analysis or run_downstream completes. "
-        "report_json: path to final_mapping_report.json."
+        "Use this for a quick sanity check after explicit runtime steps or run_downstream completes. "
+        "report_json: path to final_mapping_report.json. "
+        "This is the default 'status check' tool after any downstream rerun."
     )
 )
 def read_final_report(report_json: str) -> dict[str, Any]:
@@ -281,7 +215,9 @@ def read_final_report(report_json: str) -> dict[str, Any]:
         "Read one mapping record from the final mapping report by case_id for deep inspection. "
         "case_id format is '<function_name>@<hex_address>', e.g. 'sub_401234@00401234'. "
         "Returns the full record including retrieval scores, graph evidence, and status reasons. "
-        "Useful for reverse-validating an accepted mapping or understanding why a case was deferred."
+        "Useful for reverse-validating an accepted mapping or understanding why a case was deferred. "
+        "Prefer show_candidate_context when you want the mapping record plus triage payload and "
+        "query-feature summary in one call."
     )
 )
 def read_mapping_record(report_json: str, case_id: str) -> dict[str, Any]:
@@ -318,6 +254,63 @@ def _save_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def _find_record_by_case_id(report_data: dict[str, Any], case_id: str) -> tuple[str | None, dict[str, Any] | None]:
+    for key in ("mapping_records", "accepted", "deferred", "conflicts"):
+        rows = report_data.get(key, [])
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if row.get("case_id") == case_id:
+                return key, row
+    return None, None
+
+
+def _load_query_feature_summary(query_file: Path, query_func: str) -> dict[str, Any] | None:
+    if not query_file.exists():
+        return None
+    try:
+        data = _load_json(query_file)
+    except Exception:
+        return None
+    if not isinstance(data, list):
+        return None
+    for row in data:
+        if row.get("function_name") != query_func:
+            continue
+        compare_value = row.get("compare", [])
+        if isinstance(compare_value, list):
+            compare_value = compare_value[:10]
+        read_write_value = row.get("read_write", [])
+        if isinstance(read_write_value, list):
+            read_write_value = read_write_value[:10]
+        return {
+            "function_name": row.get("function_name"),
+            "entry_point": row.get("entry_point"),
+            "architecture": row.get("architecture"),
+            "lua_version": row.get("lua_version"),
+            "basic_block_count": row.get("basic_block_count"),
+            "pcode_instruction_count": row.get("pcode_instruction_count"),
+            "strings": row.get("strings", [])[:10],
+            "callees": row.get("callees", [])[:10],
+            "callers": row.get("callers", [])[:10],
+            "struct_offsets": row.get("struct_offsets", [])[:10],
+            "compare": compare_value,
+            "read_write": read_write_value,
+        }
+    return None
+
+
+def _find_deferred_case(deferred_data: dict[str, Any], case_id: str) -> tuple[str | None, dict[str, Any] | None]:
+    for key in ("deferred_cases", "conflict_cases"):
+        rows = deferred_data.get(key, [])
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if row.get("case_id") == case_id:
+                return key, row
+    return None, None
 
 
 def _deferred_top_candidates(config: dict) -> str:
@@ -402,7 +395,8 @@ def _run_downstream_steps(
         "query_func is the stripped function name (e.g. sub_401234), "
         "reference_func is the confirmed Lua function name (e.g. luaD_precall), "
         "reason should summarize the decompile evidence used to make this decision. "
-        "To register multiple anchors at once use batch_register_force_anchors instead."
+        "To register multiple anchors at once use batch_register_force_anchors instead. "
+        "Only use this after manual validation; do not use it for speculative guesses."
     )
 )
 def register_force_anchor(
@@ -459,7 +453,8 @@ def register_force_anchor(
         "Much more efficient than calling register_force_anchor N times when you have "
         "several deferred/conflict cases resolved in one IDA analysis session. "
         "anchors is a list of {query_func, reference_func, reason} dicts. "
-        "Duplicates (query_func already registered) are silently skipped."
+        "Duplicates (query_func already registered) are silently skipped. "
+        "This is the preferred anchor-registration tool for batch analyst workflows."
     )
 )
 def batch_register_force_anchors(
@@ -522,11 +517,161 @@ def batch_register_force_anchors(
 
 @mcp.tool(
     description=(
+        "Remove one or more force anchors for a query function from seed_anchors.json. "
+        "Only anchors with source='force_anchor' are removed; retrieval_high_confidence seeds are preserved. "
+        "If rerun_downstream is true, re-run build_suite → propagation → deferred_analysis → final_report "
+        "after removal so the report stays in sync. "
+        "Use this to undo a bad manual anchor without touching automatic seeds."
+    )
+)
+def remove_force_anchor(
+    config_path: str,
+    query_func: str,
+    rerun_downstream: bool = True,
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+
+    anchor_path = _resolve_path(paths["seed_anchor_json"])
+    if not anchor_path.exists():
+        return {"ok": False, "error": f"seed_anchor_json not found: {anchor_path}"}
+
+    anchor_data = _load_json(anchor_path)
+    mappings = anchor_data.get("mappings", [])
+    removed = [
+        m for m in mappings
+        if m.get("query_function_name") == query_func and m.get("source") == "force_anchor"
+    ]
+    if not removed:
+        return {
+            "ok": False,
+            "error": f"no force_anchor found for query_func: {query_func}",
+            "seed_anchor_json": str(anchor_path),
+        }
+
+    anchor_data["mappings"] = [
+        m for m in mappings
+        if not (m.get("query_function_name") == query_func and m.get("source") == "force_anchor")
+    ]
+    _save_json(anchor_path, anchor_data)
+
+    if not rerun_downstream:
+        return {
+            "ok": True,
+            "removed_count": len(removed),
+            "removed": removed,
+            "rerun_downstream": False,
+            "seed_anchor_json": str(anchor_path),
+        }
+
+    ok, steps = _run_downstream_steps(config=config, paths=paths)
+    if not ok:
+        return {
+            "ok": False,
+            "removed_count": len(removed),
+            "removed": removed,
+            "steps": steps,
+        }
+
+    updated_report = _load_json(_resolve_path(paths["final_report_json"]))
+    return {
+        "ok": True,
+        "removed_count": len(removed),
+        "removed": removed,
+        "rerun_downstream": True,
+        "updated_summary": updated_report.get("summary", {}),
+        "report_json": str(_resolve_path(paths["final_report_json"])),
+        "steps": [{"step": s["step"], "ok": s["ok"], "returncode": s["returncode"]} for s in steps],
+    }
+
+
+@mcp.tool(
+    description=(
+        "Show one analyst-friendly context bundle for a case_id. "
+        "Combines the final mapping record, deferred/conflict triage payload, current seed anchor "
+        "status, and a compact query feature summary. "
+        "Use this before deciding whether to register or remove a force anchor. "
+        "This is the best single-call context tool for one deferred or conflict case."
+    )
+)
+def show_candidate_context(config_path: str, case_id: str) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+
+    report_path = _resolve_path(paths["final_report_json"])
+    deferred_path = _resolve_path(paths["deferred_output_json"])
+    anchor_path = _resolve_path(paths["seed_anchor_json"])
+
+    if not report_path.exists():
+        return {"ok": False, "error": f"final_report_json not found: {report_path}"}
+    if not deferred_path.exists():
+        return {"ok": False, "error": f"deferred_output_json not found: {deferred_path}"}
+    if not anchor_path.exists():
+        return {"ok": False, "error": f"seed_anchor_json not found: {anchor_path}"}
+
+    report_data = _load_json(report_path)
+    report_section, mapping_record = _find_record_by_case_id(report_data, case_id)
+    if not mapping_record:
+        return {"ok": False, "error": f"case_id not found: {case_id}", "report_json": str(report_path)}
+
+    deferred_data = _load_json(deferred_path)
+    triage_section, triage_case = _find_deferred_case(deferred_data, case_id)
+
+    anchor_data = _load_json(anchor_path)
+    query_func = mapping_record.get("query_func")
+    matching_anchors = [
+        m for m in anchor_data.get("mappings", [])
+        if m.get("query_function_name") == query_func
+    ]
+
+    query_file = _resolve_path(mapping_record.get("query_file", ""))
+    query_summary = _load_query_feature_summary(query_file, query_func) if query_file else None
+
+    compact_candidates = []
+    if triage_case:
+        for cand in triage_case.get("top_candidates", [])[:5]:
+            compact_candidates.append({
+                "reference_function_name": cand.get("reference_function_name"),
+                "candidate_source": cand.get("candidate_source"),
+                "final_score": cand.get("final_score"),
+                "retrieval_prior": cand.get("retrieval_prior"),
+                "graph_score": cand.get("graph_score"),
+                "graph_breakdown": cand.get("graph_breakdown"),
+            })
+
+    return {
+        "ok": True,
+        "case_id": case_id,
+        "query_func": query_func,
+        "report_json": str(report_path),
+        "deferred_json": str(deferred_path),
+        "seed_anchor_json": str(anchor_path),
+        "mapping_record_source": report_section,
+        "mapping_record": mapping_record,
+        "triage_case_source": triage_section,
+        "triage_case": {
+            "review_category": triage_case.get("review_category"),
+            "current_top_prediction": triage_case.get("current_top_prediction"),
+            "recommended_action": triage_case.get("recommended_action"),
+            "score_margin_top1_top2": triage_case.get("score_margin_top1_top2"),
+            "anchor_counts": triage_case.get("anchor_counts"),
+            "anchors": triage_case.get("anchors"),
+            "status_reasons": triage_case.get("status_reasons"),
+            "top_candidates": compact_candidates,
+        } if triage_case else None,
+        "registered_anchors_for_query": matching_anchors,
+        "query_feature_summary": query_summary,
+    }
+
+
+@mcp.tool(
+    description=(
         "Re-run only the downstream steps (build_suite → propagation → deferred_analysis → final_report) "
         "without touching retrieval or seed_selection. "
         "Use this after manually editing seed_anchors.json, or after batch_register_force_anchors "
         "if you want a fresh run without re-registering anchors. "
         "Critically: does NOT overwrite seed_anchors.json, so force anchors are preserved."
+        " This is the standard rerun tool after anchor edits."
     )
 )
 def run_downstream(config_path: str) -> dict[str, Any]:
@@ -555,6 +700,7 @@ def run_downstream(config_path: str) -> dict[str, Any]:
         "Read a quick summary of the propagation result: accepted/deferred/conflict counts "
         "plus the full deferred and conflict case lists with their top predictions and reasons. "
         "Use this to check pipeline progress without reading the large final_mapping_report.json."
+        " Prefer this when you want propagation-centric status rather than the full final report."
     )
 )
 def read_propagation_summary(config_path: str) -> dict[str, Any]:

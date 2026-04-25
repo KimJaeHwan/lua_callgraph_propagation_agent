@@ -31,6 +31,11 @@ Typical commands:
   python scripts/10_run_name_mapping_pipeline.py \\
     --config data/configs/runtime_recommended_binary.json \\
     --phase extraction --dry-run
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[Warning]해당 스크립트는 사용하지 마십시오 !!!!!!!!!!!!!!!!!!
+ghidra feature extraction과 retrieval/propagation이 메모리 측면에서 충돌이 발생할 수 있어, 두 단계를 분리하여 실행하는 새로운 config 포맷을 도입했습니다. 새 포맷에서는 --phase 플래그로 extraction 또는 analysis 단계만 선택적으로 실행할 수 있습니다. 기존의 legacy 포맷도 여전히 지원하지만, 새 포맷으로의 전환을 권장드립니다.
 """
 
 from __future__ import annotations

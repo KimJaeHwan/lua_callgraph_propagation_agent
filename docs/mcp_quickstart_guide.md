@@ -1,0 +1,180 @@
+# MCP Quickstart Guide
+
+`lua_callgraph_propagation_agent` MCP는 "Lua 함수 이름 매핑 파이프라인을 단계별로 조작하는 도구 모음"이다.
+
+처음 붙이면 가장 헷갈리는 점은 이거다.
+
+- 어떤 tool을 언제 써야 하는지
+- full pipeline과 downstream rerun의 차이
+- force anchor를 언제 넣어야 하는지
+- binary 입력과 pre-extracted 입력이 어떻게 다른지
+
+이 문서는 그 흐름을 빠르게 익히기 위한 입문 가이드다.
+
+## 한 줄 이해
+
+이 MCP는 크게 4가지를 한다.
+
+1. 입력 준비
+2. 분석 실행
+3. 결과 읽기
+4. analyst 개입 후 재실행
+
+즉 "자동 분석 + 사람이 확정한 anchor 반영 + 재전파"를 반복하기 위한 인터페이스라고 보면 된다.
+
+## 가장 먼저 이해할 개념
+
+### 1. binary 분석과 pre-extracted 분석은 다르다
+
+binary 입력은 Ghidra가 필요하다.
+
+- 먼저 feature extraction
+- 그다음 retrieval/propagation
+
+이 둘을 한 프로세스에서 같이 돌리면 메모리 문제가 나기 쉬워서 분리 실행하는 게 원칙이다.
+
+pre-extracted 입력은 이미 feature JSON이 있으므로 extraction이 필요 없다.
+
+### 2. force anchor는 "사람이 확정한 정답"이다
+
+retrieval과 propagation이 자동으로 잡아준 후보가 애매할 때,
+IDA/Ghidra decompile을 보고 사람이 확정한 함수 매핑을 `force_anchor`로 등록한다.
+
+그다음 propagation을 다시 돌리면 주변 함수들까지 더 잘 풀릴 수 있다.
+
+### 3. downstream rerun은 retrieval를 다시 하지 않는다
+
+`run_downstream`은 이 단계만 다시 돌린다.
+
+- build_suite
+- propagation
+- deferred_analysis
+- final_report
+
+즉 seed anchor를 수정했을 때 빠르게 재실행하는 용도다.
+
+## 어떤 tool부터 써야 하나
+
+### A. 새 바이너리 처음 분석할 때
+
+binary target이면 보통 이 순서다.
+
+1. `extract_query_features`
+2. retrieval/seed/propagation 결과 확인 또는 개별 스크립트 실행
+3. `read_final_report`
+4. `list_deferred_cases`
+5. IDA/Ghidra에서 몇 개 확인
+6. `batch_register_force_anchors`
+7. `read_final_report`
+
+### B. 이미 feature가 있는 상태에서 분석할 때
+
+보통 이 순서다.
+
+1. retrieval/seed/propagation 결과 준비
+2. `read_final_report`
+3. `list_deferred_cases`
+4. `read_mapping_record`
+5. analyst 확인
+6. `register_force_anchor` 또는 `batch_register_force_anchors`
+
+### C. seed를 직접 수정한 뒤 재실행만 할 때
+
+1. `run_downstream`
+2. `read_final_report`
+
+## tool을 고를 때 빠른 판단표
+
+### "지금 뭘 하고 싶은지" 기준
+
+- 바이너리에서 feature만 뽑고 싶다
+  - `extract_query_features`
+
+- deferred/conflict만 보고 싶다
+  - `list_deferred_cases`
+
+- 특정 case 하나를 자세히 보고 싶다
+  - `read_mapping_record`
+
+- 현재 accepted/deferred/conflict 수만 빨리 보고 싶다
+  - `read_final_report`
+  - 또는 `read_propagation_summary`
+
+- 내가 확인한 정답을 anchor로 반영하고 싶다
+  - 하나면 `register_force_anchor`
+  - 여러 개면 `batch_register_force_anchors`
+
+- anchor 수정 후 retrieval는 건드리지 않고 propagation만 다시 돌리고 싶다
+  - `run_downstream`
+
+## 가장 흔한 실수
+
+### 1. MCP에서 10번 파이프라인 tool이 있을 거라고 기대하는 것
+
+지금 MCP는 일부러 그런 tool을 노출하지 않는다.
+
+이유:
+
+- extraction과 analysis가 한 프로세스에 묶이기 쉽고
+- Ghidra JVM과 embedding 모델 메모리가 겹칠 수 있다
+
+그래서 MCP에서는:
+
+- `extract_query_features`
+- 결과 조회 / anchor 관리 / `run_downstream`
+
+이 조합으로 analyst loop를 돌리는 쪽을 기준으로 본다.
+
+### 2. deferred를 보지 않고 바로 force anchor를 넣는 것
+
+score가 높아 보여도 오탐일 수 있다.
+
+안전한 흐름:
+
+1. `list_deferred_cases`
+2. `read_mapping_record`
+3. IDA/Ghidra 확인
+4. 그다음 force anchor
+
+### 3. anchor를 여러 개 넣으면서 `register_force_anchor`를 반복 호출하는 것
+
+가능은 하지만 비효율적이다.
+
+여러 개를 한 번에 정리했으면:
+
+- `batch_register_force_anchors`
+
+가 더 좋다.
+
+## 실전 사고 흐름
+
+이 MCP를 잘 쓰려면 "정답을 바로 맞히려는" 느낌보다,
+"불확실한 영역을 점점 줄이는" 흐름으로 보는 게 좋다.
+
+보통은 이렇게 생각하면 된다.
+
+1. 자동 파이프라인으로 큰 지도를 깐다
+2. deferred/conflict를 본다
+3. 허브 함수나 라이브러리 open 함수부터 확정한다
+4. force anchor를 넣는다
+5. propagation을 다시 돌린다
+6. 결과가 좋아졌는지 본다
+7. 다시 다음 허브로 간다
+
+## 추천 시작 세트
+
+처음 MCP를 붙인 사람이 가장 먼저 익혀야 할 tool 조합:
+
+1. `extract_query_features`
+2. `read_final_report`
+3. `list_deferred_cases`
+4. `show_candidate_context`
+5. `batch_register_force_anchors`
+6. `run_downstream`
+
+이 6개만 익혀도 analyst loop는 거의 돌릴 수 있다.
+
+## 같이 보면 좋은 문서
+
+- [mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
+- [mcp_feature_review.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_feature_review.md)

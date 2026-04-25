@@ -43,6 +43,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from tqdm import tqdm
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -117,15 +119,23 @@ class ReferenceGraphDB:
     def __init__(self, path: Path):
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA temp_store=MEMORY")
+        self.conn.execute("PRAGMA cache_size=-200000")
+        self._reference_function_names: set[str] | None = None
+        self._edge_opt_levels_cache: dict[tuple[str, str, str, str, str], set[str]] = {}
+        self._incoming_edge_cache: dict[tuple[str, str, str, str], list[tuple[str, str]]] = {}
+        self._outgoing_edge_cache: dict[tuple[str, str, str, str], list[tuple[str, str]]] = {}
 
     def close(self) -> None:
         self.conn.close()
 
     def reference_function_names(self) -> set[str]:
-        rows = self.conn.execute(
-            "SELECT DISTINCT function_name FROM functions WHERE graph_role = 'reference'"
-        ).fetchall()
-        return {row["function_name"] for row in rows}
+        if self._reference_function_names is None:
+            rows = self.conn.execute(
+                "SELECT DISTINCT function_name FROM functions WHERE graph_role = 'reference'"
+            ).fetchall()
+            self._reference_function_names = {row["function_name"] for row in rows}
+        return self._reference_function_names
 
     def edge_opt_levels(
         self,
@@ -136,6 +146,11 @@ class ReferenceGraphDB:
         architecture: str,
         strip_mode: str,
     ) -> set[str]:
+        key = (lua_version, architecture, strip_mode, src_name, dst_name)
+        cached = self._edge_opt_levels_cache.get(key)
+        if cached is not None:
+            return cached
+
         rows = self.conn.execute(
             """
             SELECT DISTINCT opt_level
@@ -149,7 +164,67 @@ class ReferenceGraphDB:
             """,
             (lua_version, architecture, strip_mode, src_name, dst_name),
         ).fetchall()
-        return {row["opt_level"] for row in rows}
+        result = {row["opt_level"] for row in rows}
+        self._edge_opt_levels_cache[key] = result
+        return result
+
+    def incoming_edges(
+        self,
+        *,
+        lua_version: str,
+        architecture: str,
+        strip_mode: str,
+        dst_name: str,
+    ) -> list[tuple[str, str]]:
+        key = (lua_version, architecture, strip_mode, dst_name)
+        cached = self._incoming_edge_cache.get(key)
+        if cached is not None:
+            return cached
+
+        rows = self.conn.execute(
+            """
+            SELECT DISTINCT src_name, opt_level
+            FROM edges
+            WHERE graph_role = 'reference'
+              AND lua_version = ?
+              AND architecture = ?
+              AND strip_mode = ?
+              AND dst_name = ?
+            """,
+            (lua_version, architecture, strip_mode, dst_name),
+        ).fetchall()
+        result = [(row["src_name"], row["opt_level"]) for row in rows]
+        self._incoming_edge_cache[key] = result
+        return result
+
+    def outgoing_edges(
+        self,
+        *,
+        lua_version: str,
+        architecture: str,
+        strip_mode: str,
+        src_name: str,
+    ) -> list[tuple[str, str]]:
+        key = (lua_version, architecture, strip_mode, src_name)
+        cached = self._outgoing_edge_cache.get(key)
+        if cached is not None:
+            return cached
+
+        rows = self.conn.execute(
+            """
+            SELECT DISTINCT dst_name, opt_level
+            FROM edges
+            WHERE graph_role = 'reference'
+              AND lua_version = ?
+              AND architecture = ?
+              AND strip_mode = ?
+              AND src_name = ?
+            """,
+            (lua_version, architecture, strip_mode, src_name),
+        ).fetchall()
+        result = [(row["dst_name"], row["opt_level"]) for row in rows]
+        self._outgoing_edge_cache[key] = result
+        return result
 
     def expansion_candidates(
         self,
@@ -187,36 +262,22 @@ class ReferenceGraphDB:
             )
 
         for anchor in callee_anchors:
-            rows = self.conn.execute(
-                """
-                SELECT DISTINCT src_name, opt_level
-                FROM edges
-                WHERE graph_role = 'reference'
-                  AND lua_version = ?
-                  AND architecture = ?
-                  AND strip_mode = ?
-                  AND dst_name = ?
-                """,
-                (lua_version, architecture, strip_mode, anchor),
-            ).fetchall()
-            for row in rows:
-                add_candidate(row["src_name"], "candidate_calls_anchor", anchor, row["opt_level"])
+            for src_name, opt_level in self.incoming_edges(
+                lua_version=lua_version,
+                architecture=architecture,
+                strip_mode=strip_mode,
+                dst_name=anchor,
+            ):
+                add_candidate(src_name, "candidate_calls_anchor", anchor, opt_level)
 
         for anchor in caller_anchors:
-            rows = self.conn.execute(
-                """
-                SELECT DISTINCT dst_name, opt_level
-                FROM edges
-                WHERE graph_role = 'reference'
-                  AND lua_version = ?
-                  AND architecture = ?
-                  AND strip_mode = ?
-                  AND src_name = ?
-                """,
-                (lua_version, architecture, strip_mode, anchor),
-            ).fetchall()
-            for row in rows:
-                add_candidate(row["dst_name"], "anchor_calls_candidate", anchor, row["opt_level"])
+            for dst_name, opt_level in self.outgoing_edges(
+                lua_version=lua_version,
+                architecture=architecture,
+                strip_mode=strip_mode,
+                src_name=anchor,
+            ):
+                add_candidate(dst_name, "anchor_calls_candidate", anchor, opt_level)
 
         return sorted(
             expanded.values(),
@@ -229,9 +290,20 @@ class ReferenceGraphDB:
         )[:limit]
 
 
-def load_query_function(embedding_root: Path, retrieval_case: dict) -> dict:
+def load_query_function(
+    embedding_root: Path,
+    retrieval_case: dict,
+    *,
+    query_file_cache: dict[Path, list[dict]] | None = None,
+) -> dict:
     query_file = resolve_path(retrieval_case["query_file"], base=embedding_root)
-    rows = load_json(query_file)
+    if query_file_cache is not None:
+        rows = query_file_cache.get(query_file)
+        if rows is None:
+            rows = load_json(query_file)
+            query_file_cache[query_file] = rows
+    else:
+        rows = load_json(query_file)
     query_func = retrieval_case["query_func"]
     for row in rows:
         if row.get("function_name") == query_func:
@@ -617,11 +689,13 @@ def run_iterative_propagation(
         policy["accept_margin"] = round(base_margin + round_num * margin_tightening, 6)
 
         round_results: list[dict] = []
-
-        for case_cfg in suite_cases:
+        pending_cases = [case_cfg for case_cfg in suite_cases if case_cfg["case_id"] in unresolved_ids]
+        for case_cfg in tqdm(
+            pending_cases,
+            desc=f"propagation round {round_num}",
+            unit="case",
+        ):
             case_id = case_cfg["case_id"]
-            if case_id not in unresolved_ids:
-                continue
 
             result = _process_one_case(
                 case_cfg=case_cfg,
@@ -746,9 +820,14 @@ def main() -> None:
 
     # Pre-load all query rows once to avoid repeated file I/O across rounds
     query_row_cache: dict[str, dict] = {}
-    for case_cfg in suite_cases:
+    query_file_cache: dict[Path, list[dict]] = {}
+    for case_cfg in tqdm(suite_cases, desc="preload query rows", unit="case"):
         case_id = case_cfg["case_id"]
-        query_row_cache[case_id] = load_query_function(embedding_root, retrieval_cases[case_id])
+        query_row_cache[case_id] = load_query_function(
+            embedding_root,
+            retrieval_cases[case_id],
+            query_file_cache=query_file_cache,
+        )
 
     round_log: list[dict] = []
 
@@ -781,7 +860,7 @@ def main() -> None:
             )
         else:
             results = []
-            for case_cfg in suite_cases:
+            for case_cfg in tqdm(suite_cases, desc="single-pass propagation", unit="case"):
                 case_id = case_cfg["case_id"]
                 result = _process_one_case(
                     case_cfg=case_cfg,

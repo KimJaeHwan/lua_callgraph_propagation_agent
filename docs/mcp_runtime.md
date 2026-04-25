@@ -3,6 +3,15 @@
 `lua_callgraph_propagation_agent`는 FastMCP 기반 stdio MCP 서버를 제공한다.  
 analyst 또는 상위 LLM agent가 파이프라인을 제어하고 deferred case를 해소할 수 있는 표준화된 인터페이스다.
 
+중요한 점: 여기 문서만 중요한 게 아니라, 실제 MCP 서버의 `instructions`와 각 tool의
+`description`도 LLM에게 직접 노출된다. 그래서 툴 설명은 단순 주석이 아니라
+"이 tool을 언제 쓰고, 언제 쓰면 안 되는지"를 알려주는 실행 힌트 역할을 한다.
+
+처음 쓰는 사람이라면 이 문서 전에 아래 두 문서를 먼저 보는 편이 더 쉽다.
+
+- [mcp_quickstart_guide.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_quickstart_guide.md)
+- [mcp_tool_reference.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_tool_reference.md)
+
 ## 실행
 
 ```bash
@@ -18,38 +27,12 @@ python scripts/20_run_mcp_server.py
 
 ## 툴 목록
 
-### 파이프라인 실행 툴
-
-#### `run_extraction`
-config JSON을 받아 **Ghidra feature 추출만** 서브프로세스로 실행한다.  
-binary target인 경우 이 툴로 extraction을 완전히 끝낸 뒤 `run_analysis`를 호출해야 한다.  
-Ghidra JVM과 embedding 모델의 메모리 충돌을 피하기 위해 분리 설계됐다.
-
-```
-config_path: str   — data/configs/runtime_xxx.json 경로
-stop_on_error: bool — 기본 True
-```
-
-#### `run_analysis`
-config JSON을 받아 **retrieval → seed anchors → propagation → report** 단계를 실행한다.  
-`run_extraction`이 완전히 종료된 후 호출한다.  
-pre-extracted config(binary 없는 config)에서도 사용 가능하다.
-
-```
-config_path: str
-stop_on_error: bool — 기본 True
-```
-
-#### `pipeline_run`
-pre-extracted config 전용 전체 파이프라인.  
-**⚠️ binary target에는 사용 금지** — Ghidra JVM + embedding 메모리 겹침으로 OOM 위험.
-
-#### `pipeline_dry_run`
-파이프라인 명령을 실행하지 않고 미리 확인한다. 경로·단계 순서 검증용.
+### 실행 툴
 
 #### `extract_query_features`
 단일 바이너리에서 Ghidra feature를 추출해 런타임 workspace에 저장한다.  
-`run_extraction`과 달리 config 없이 각 파라미터를 직접 지정할 때 사용한다.
+MCP에서는 `10_run_name_mapping_pipeline.py`를 감싸는 tool을 일부러 노출하지 않고,
+이 tool처럼 단계가 분리된 실행만 제공한다.
 
 ```
 binary: str          — 대상 .so / ELF 절대 경로
@@ -82,7 +65,7 @@ scoring_mode: str         — 'bonus_v2' 권장
 
 #### `read_final_report`
 최종 보고서 summary(accepted/deferred/conflict 수)와 각 bucket 상위 5개 preview를 반환한다.  
-`run_analysis` 또는 `run_downstream` 완료 후 빠른 결과 확인용.
+명시적 단계 실행 또는 `run_downstream` 완료 후 빠른 결과 확인용.
 
 ```
 report_json: str  — final_mapping_report.json 경로
@@ -165,11 +148,11 @@ config_path: str
 ### 신규 바이너리 전체 분석
 
 ```
-1. extract_query_features  또는  run_extraction
+1. extract_query_features
    → Ghidra feature 추출. 완전히 종료될 때까지 기다린다.
 
-2. run_analysis
-   → retrieval → seed anchors → propagation → report 자동 실행
+2. 12/13/14/04/05/15 스크립트 또는 외부 orchestrator
+   → retrieval → seed anchors → propagation → report 실행
 
 3. read_final_report
    → accepted/deferred/conflict 수 확인
@@ -201,5 +184,6 @@ config_path: str
 
 - **복잡한 reasoning은 deterministic script가 담당한다.** MCP는 그 스크립트들을 표준 인터페이스로 노출할 뿐이다.
 - **extraction과 analysis는 반드시 분리한다.** Ghidra JVM + embedding 메모리 겹침 방지.
-- **force anchor는 파이프라인 재실행에 살아남는다.** `13_select_seed_anchors.py`가 `AUTO_SOURCES`(retrieval_high_confidence, name_visible) 이외의 anchor를 보존하므로 `run_analysis`를 다시 실행해도 force anchor는 유지된다.
+- **MCP는 10번 통합 파이프라인 entrypoint를 노출하지 않는다.** 실전 binary 분석에서 오해를 줄이기 위한 의도적 제한이다.
+- **force anchor는 후속 재실행에도 살아남는다.** `13_select_seed_anchors.py`가 `AUTO_SOURCES`(retrieval_high_confidence, name_visible) 이외의 anchor를 보존하므로 retrieval/seed-selection 이후 단계만 다시 돌려도 force anchor는 유지된다.
 - **downstream만 재실행 가능.** retrieval 결과가 변하지 않은 상황에서 anchor 수정 후 propagation만 빠르게 재실행할 수 있다.

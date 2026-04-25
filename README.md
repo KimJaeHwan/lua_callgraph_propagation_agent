@@ -72,11 +72,12 @@ python scripts/04_propagate_from_anchors.py --iterative ...
 python scripts/15_export_final_mapping_report.py ...
 ```
 
-또는 MCP 서버를 통해 `run_extraction` → `run_analysis` 순서로 호출한다.
-
 ## 메모리 이슈 주의
 
 `scripts/10_run_name_mapping_pipeline.py`는 extraction + analysis를 하나의 프로세스에서 순서대로 실행하는 참조용 스크립트다. Ghidra JVM과 embedding 모델이 메모리를 동시에 점유하면 OOM이 발생할 수 있으므로, **실제 binary 분석에서는 10번 스크립트를 직접 사용하지 않는다.**
+
+같은 이유로 MCP 서버도 `10_run_name_mapping_pipeline.py`를 감싸는 tool을 노출하지 않는다.  
+MCP에서는 extraction과 downstream 단계를 직접 호출하는 방식만 지원한다.
 
 ## FastMCP 서버
 
@@ -86,16 +87,13 @@ python scripts/20_run_mcp_server.py
 
 ### 제공 툴 목록
 
-#### 파이프라인 실행
+#### 실행 / 분석
 
 | 툴 | 설명 |
 |----|------|
-| `run_extraction` | config 기반 Ghidra feature 추출 (binary config 전용) |
-| `run_analysis` | config 기반 retrieval → seed anchors → propagation → report |
-| `pipeline_run` | pre-extracted config 전용 전체 파이프라인 (binary 대상 사용 금지) |
-| `pipeline_dry_run` | 실행 없이 파이프라인 명령 미리 확인 |
 | `extract_query_features` | 단일 바이너리 Ghidra feature 추출 |
 | `bulk_query_retrieval` | feature manifest → retrieval top-k 생성 |
+| `run_downstream` | build_suite → propagation → deferred_analysis → final_report 재실행 |
 
 #### 결과 조회
 
@@ -117,8 +115,8 @@ python scripts/20_run_mcp_server.py
 ### 전형적인 워크플로우
 
 ```
-1. run_extraction          → Ghidra로 feature 추출
-2. run_analysis            → retrieval + propagation 전체 실행
+1. extract_query_features  → Ghidra로 feature 추출
+2. 12/13/14/04/05/15 스크립트 또는 기존 결과 파일 준비
 3. read_final_report       → 결과 확인 (accepted/deferred/conflict 수)
 4. list_deferred_cases     → deferred/conflict 케이스 목록 확인
 5. (IDA로 deferred 케이스 decompile 분석)
@@ -138,6 +136,8 @@ python scripts/20_run_mcp_server.py
 ## 관련 문서
 
 - [docs/mcp_runtime.md](docs/mcp_runtime.md) — MCP 툴 상세 설명
+- [docs/mcp_quickstart_guide.md](docs/mcp_quickstart_guide.md) — 처음 쓰는 사람용 MCP 입문 가이드
+- [docs/mcp_tool_reference.md](docs/mcp_tool_reference.md) — tool별 기능/입력/주의점 레퍼런스
 - [docs/input_schema.md](docs/input_schema.md) — feature JSON 스키마
 - [docs/config_field_reference.md](docs/config_field_reference.md) — config 필드 레퍼런스
 - [docs/extraction_runtime_environment.md](docs/extraction_runtime_environment.md) — Ghidra 환경 설정

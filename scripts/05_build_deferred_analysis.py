@@ -24,6 +24,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from tqdm import tqdm
+
 
 DEFAULT_INPUT = Path("data/eval/results/anchor_propagation_lua547_summary.json")
 DEFAULT_OUTPUT = Path("data/eval/results/representative/deferred_analysis_lua547.json")
@@ -147,7 +149,7 @@ def summarize_feature(row: dict | None) -> dict | None:
 def load_query_features(embedding_root: Path, rows: list[dict]) -> dict[str, dict]:
     cache: dict[Path, list[dict]] = {}
     features: dict[str, dict] = {}
-    for row in rows:
+    for row in tqdm(rows, desc="load query features", unit="case"):
         query_file = row.get("query_file")
         query_func = row.get("query_func")
         if not query_file or not query_func:
@@ -322,7 +324,7 @@ def main() -> None:
             top_n=args.top_candidates,
             query_feature=query_features.get(row["case_id"]),
         )
-        for row in deferred_rows
+        for row in tqdm(deferred_rows, desc="build deferred cases", unit="case")
     ]
     conflicts = [
         build_analysis_case(
@@ -330,7 +332,7 @@ def main() -> None:
             top_n=args.top_candidates,
             query_feature=query_features.get(row["case_id"]),
         )
-        for row in conflict_rows
+        for row in tqdm(conflict_rows, desc="build conflict cases", unit="case")
     ]
 
     category_counts: dict[str, int] = {}

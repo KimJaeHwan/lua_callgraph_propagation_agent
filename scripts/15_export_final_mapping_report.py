@@ -9,6 +9,8 @@ import argparse
 import json
 from pathlib import Path
 
+from tqdm import tqdm
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -71,7 +73,7 @@ def main() -> None:
     conflicts = []
     mapping_records = []
 
-    for row in propagation.get("results", []):
+    for row in tqdm(propagation.get("results", []), desc="build final report", unit="case"):
         compact = {
             "case_id": row.get("case_id"),
             "query_func": row.get("query_func"),
