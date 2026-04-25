@@ -89,37 +89,51 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def discover_feature_files(input_root: Path) -> list[FeatureFile]:
+def parse_feature_meta(input_root: Path, path: Path) -> FeatureFile | None:
+    try:
+        rel = path.relative_to(input_root)
+    except ValueError:
+        return None
+
+    # Supports both layouts:
+    #   input_root/Lua_547/x86_64/O0/nostrip/file.json
+    #   input_root/x86_64/O0/nostrip/file.json   where input_root.name == Lua_547
+    if len(rel.parts) >= 5 and rel.parts[0].startswith("Lua_"):
+        lua_version, architecture, opt_level, strip_mode = rel.parts[:4]
+    elif len(rel.parts) >= 4 and input_root.name.startswith("Lua_"):
+        lua_version = input_root.name
+        architecture, opt_level, strip_mode = rel.parts[:3]
+    else:
+        return None
+
+    if not lua_version.startswith("Lua_"):
+        return None
+    if architecture not in {"aarch64", "arm64", "x86_64"}:
+        return None
+    if not opt_level.startswith("O"):
+        return None
+    if strip_mode not in {"nostrip", "stripped"}:
+        return None
+
+    normalized_arch = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
+    return FeatureFile(
+        path=path,
+        lua_version=lua_version,
+        architecture=normalized_arch,
+        opt_level=opt_level,
+        strip_mode=strip_mode,
+    )
+
+
+def discover_feature_files(input_root: Path, lua_version_filter: str | None = None) -> list[FeatureFile]:
     files: list[FeatureFile] = []
     for path in sorted(input_root.rglob("*.json")):
-        try:
-            rel = path.relative_to(input_root)
-        except ValueError:
+        meta = parse_feature_meta(input_root, path)
+        if meta is None:
             continue
-
-        if len(rel.parts) < 5:
+        if lua_version_filter and meta.lua_version != lua_version_filter:
             continue
-
-        lua_version, architecture, opt_level, strip_mode = rel.parts[:4]
-        if not lua_version.startswith("Lua_"):
-            continue
-        if architecture not in {"aarch64", "arm64", "x86_64"}:
-            continue
-        if not opt_level.startswith("O"):
-            continue
-        if strip_mode not in {"nostrip", "stripped"}:
-            continue
-
-        normalized_arch = "aarch64" if architecture in {"aarch64", "arm64"} else "x86_64"
-        files.append(
-            FeatureFile(
-                path=path,
-                lua_version=lua_version,
-                architecture=normalized_arch,
-                opt_level=opt_level,
-                strip_mode=strip_mode,
-            )
-        )
+        files.append(meta)
 
     return files
 
@@ -187,7 +201,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def insert_metadata(conn: sqlite3.Connection, input_root: Path) -> None:
+def insert_metadata(conn: sqlite3.Connection, input_root: Path, target_lua_version: str | None) -> None:
     rows = [
         ("schema_version", SCHEMA_VERSION),
         ("source", "lua_callgraph_propagation_agent.data.inputs.reference_features"),
@@ -195,6 +209,8 @@ def insert_metadata(conn: sqlite3.Connection, input_root: Path) -> None:
         ("graph_role", "reference"),
         ("storage_model", "sqlite_edge_list"),
     ]
+    if target_lua_version:
+        rows.append(("target_lua_version", target_lua_version))
     conn.executemany("INSERT INTO metadata(key, value) VALUES (?, ?)", rows)
 
 
@@ -299,10 +315,13 @@ def insert_feature_file(conn: sqlite3.Connection, meta: FeatureFile, input_root:
     return function_count, edge_count, unresolved_count
 
 
-def build_db(input_root: Path, output_db: Path, replace: bool) -> None:
-    files = discover_feature_files(input_root)
+def build_db(input_root: Path, output_db: Path, replace: bool, lua_version: str | None) -> None:
+    files = discover_feature_files(input_root, lua_version)
     if not files:
-        print(f"[ERROR] no vanilla feature JSON files found: {input_root}")
+        if lua_version:
+            print(f"[ERROR] no vanilla feature JSON files found for {lua_version}: {input_root}")
+        else:
+            print(f"[ERROR] no vanilla feature JSON files found: {input_root}")
         sys.exit(2)
 
     if output_db.exists():
@@ -322,7 +341,7 @@ def build_db(input_root: Path, output_db: Path, replace: bool) -> None:
 
     try:
         create_schema(conn)
-        insert_metadata(conn, input_root)
+        insert_metadata(conn, input_root, lua_version)
 
         for feature_file in files:
             function_count, edge_count, unresolved_count = insert_feature_file(
@@ -356,9 +375,11 @@ def build_db(input_root: Path, output_db: Path, replace: bool) -> None:
         print(f"  {lua_version:7} {arch:7} {opt:2} {strip:7} functions={count}")
 
 
-def list_files(input_root: Path) -> None:
-    files = discover_feature_files(input_root)
+def list_files(input_root: Path, lua_version: str | None) -> None:
+    files = discover_feature_files(input_root, lua_version)
     print(f"Input root: {input_root}")
+    if lua_version:
+        print(f"Lua version filter: {lua_version}")
     print(f"Feature files: {len(files)}")
     for feature_file in files:
         print(feature_file.path.relative_to(input_root))
@@ -385,10 +406,10 @@ def main() -> None:
         sys.exit(2)
 
     if args.list_only:
-        list_files(input_root)
+        list_files(input_root, args.lua_version)
         return
 
-    build_db(input_root, output_db, args.replace)
+    build_db(input_root, output_db, args.replace, args.lua_version)
 
 
 if __name__ == "__main__":
