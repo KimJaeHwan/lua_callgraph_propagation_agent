@@ -59,6 +59,33 @@ topk: int                 — 반환할 top-k 수 (기본 50)
 scoring_mode: str         — 'bonus_v2' 권장
 ```
 
+#### `select_seed_anchors`
+retrieval 결과에서 propagation 시작점이 될 초기 seed anchor를 고른다.  
+`13_select_seed_anchors.py`를 감싼 MCP tool이다.
+
+```
+retrieval_json: str       — retrieval_result.json 경로
+output_json: str          — seed_anchors.json 저장 경로
+min_top1_score: float     — top1 최소 점수 (기본 0.92)
+min_margin: float         — top1-top2 최소 margin (기본 0.05)
+query_json: str           — optional, visible-name anchor 검출용 query feature JSON/manifest
+reference_db: str         — optional, visible-name 검증용 SQLite DB
+```
+
+#### `build_runtime_suite`
+retrieval 결과 + seed anchors + reference DB를 propagation 입력으로 조립한다.  
+`14_build_runtime_propagation_suite.py`를 감싼 MCP tool이다.
+
+```
+retrieval_json: str            — retrieval_result.json 경로
+anchor_json: str               — seed_anchors.json 경로
+output_json: str               — runtime_propagation_suite.json 경로
+propagation_output_json: str   — 이후 propagation이 쓸 출력 경로
+lua_version: str               — reference_db 생략 시 DB 경로 해상도용
+reference_db: str              — optional, 명시적 SQLite DB 경로
+embedding_project_root: str    — 보통 project root
+```
+
 ---
 
 ### 결과 조회 툴
@@ -151,22 +178,24 @@ config_path: str
 1. extract_query_features
    → Ghidra feature 추출. 완전히 종료될 때까지 기다린다.
 
-2. 12/13/14/04/05/15 스크립트 또는 외부 orchestrator
-   → retrieval → seed anchors → propagation → report 실행
+2. `bulk_query_retrieval`
+3. `select_seed_anchors`
+4. `build_runtime_suite`
+5. `04/05/15` 스크립트 또는 `run_downstream` 성격의 후속 실행
 
-3. read_final_report
+6. read_final_report
    → accepted/deferred/conflict 수 확인
 
-4. list_deferred_cases  또는  read_propagation_summary
+7. list_deferred_cases  또는  read_propagation_summary
    → 미해소 케이스 목록 확인
 
 5. (IDA Pro에서 deferred 케이스 decompile 분석)
    → 호출 패턴, 상수, 문자열 참조로 함수 확정
 
-6. batch_register_force_anchors
+8. batch_register_force_anchors
    → 확정 매핑 일괄 등록 + downstream 자동 재실행
 
-7. read_final_report
+9. read_final_report
    → 최종 결과 확인
 ```
 

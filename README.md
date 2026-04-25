@@ -93,6 +93,8 @@ python scripts/20_run_mcp_server.py
 |----|------|
 | `extract_query_features` | 단일 바이너리 Ghidra feature 추출 |
 | `bulk_query_retrieval` | feature manifest → retrieval top-k 생성 |
+| `select_seed_anchors` | retrieval 결과에서 초기 seed anchor 선택 |
+| `build_runtime_suite` | retrieval + seed + reference DB를 propagation 입력으로 조립 |
 | `run_downstream` | build_suite → propagation → deferred_analysis → final_report 재실행 |
 
 #### 결과 조회

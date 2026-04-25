@@ -55,6 +55,55 @@
 
 - `extract_manifest`와 `query_json` 중 하나는 필요
 
+### `select_seed_anchors`
+
+용도:
+
+- retrieval 결과에서 propagation 시작용 seed anchor를 선택
+
+언제 쓰나:
+
+- `bulk_query_retrieval` 바로 다음
+- force anchor 전의 자동 초기 anchor를 만들 때
+
+입력:
+
+- `retrieval_json`
+- `output_json`
+- `min_top1_score`
+- `min_margin`
+- `query_json` (optional)
+- `reference_db` (optional)
+
+주의:
+
+- `query_json + reference_db`를 같이 주면 visible-name anchor도 잡을 수 있음
+
+### `build_runtime_suite`
+
+용도:
+
+- retrieval + seed + reference DB를 propagation 입력 JSON으로 묶기
+
+언제 쓰나:
+
+- `select_seed_anchors` 다음
+- `04_propagate_from_anchors.py` 실행 전
+
+입력:
+
+- `retrieval_json`
+- `anchor_json`
+- `output_json`
+- `propagation_output_json`
+- `lua_version`
+- `reference_db` (optional)
+- `embedding_project_root`
+
+주의:
+
+- `reference_db`를 안 주면 `lua_version` 기준 default DB 경로를 사용
+
 ## 결과 조회 계열
 
 ### `read_final_report`

@@ -42,7 +42,13 @@ mcp = FastMCP(
 
 def _resolve_path(value: str) -> Path:
     path = Path(value)
-    return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
+    if path.is_absolute():
+        return path
+    # Allow callers to pass either project-relative paths like "data/..." or
+    # repo-root-relative paths like "lua_callgraph_propagation_agent/data/...".
+    if path.parts and path.parts[0] == PROJECT_ROOT.name:
+        path = Path(*path.parts[1:])
+    return (PROJECT_ROOT / path).resolve()
 
 
 def _run_command(command: list[str]) -> dict[str, Any]:
@@ -144,6 +150,88 @@ def bulk_query_retrieval(
         command.extend(["--extract-manifest", str(_resolve_path(extract_manifest))])
     if query_json:
         command.extend(["--query-json", str(_resolve_path(query_json))])
+    return _run_command(command)
+
+
+@mcp.tool(
+    description=(
+        "Select initial seed anchors from retrieval_result.json using deterministic confidence rules. "
+        "This wraps scripts/13_select_seed_anchors.py and produces seed_anchors.json. "
+        "Use this after bulk_query_retrieval and before build_runtime_suite. "
+        "retrieval_json: path to retrieval_result.json. "
+        "output_json: where to write seed_anchors.json. "
+        "query_json: optional query feature JSON or extract_manifest for visible-name anchor detection. "
+        "reference_db: optional reference callgraph DB used to validate visible names. "
+        "min_top1_score and min_margin control retrieval_high_confidence anchor selection."
+    )
+)
+def select_seed_anchors(
+    retrieval_json: str,
+    output_json: str,
+    min_top1_score: float = 0.92,
+    min_margin: float = 0.05,
+    query_json: str | None = None,
+    reference_db: str | None = None,
+) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        "scripts/13_select_seed_anchors.py",
+        "--retrieval-json",
+        str(_resolve_path(retrieval_json)),
+        "--output-json",
+        str(_resolve_path(output_json)),
+        "--min-top1-score",
+        str(min_top1_score),
+        "--min-margin",
+        str(min_margin),
+    ]
+    if query_json:
+        command.extend(["--query-json", str(_resolve_path(query_json))])
+    if reference_db:
+        command.extend(["--reference-db", str(_resolve_path(reference_db))])
+    return _run_command(command)
+
+
+@mcp.tool(
+    description=(
+        "Build runtime_propagation_suite.json from retrieval results, seed anchors, and a reference DB. "
+        "This wraps scripts/14_build_runtime_propagation_suite.py. "
+        "Use this after select_seed_anchors and before propagation or run_downstream-style reruns. "
+        "retrieval_json: path to retrieval_result.json. "
+        "anchor_json: path to seed_anchors.json. "
+        "output_json: where to write runtime_propagation_suite.json. "
+        "propagation_output_json: target path that propagation should later write to. "
+        "reference_db: optional explicit SQLite DB path; if omitted, lua_version is used to resolve it. "
+        "embedding_project_root should usually stay as the project root."
+    )
+)
+def build_runtime_suite(
+    retrieval_json: str,
+    anchor_json: str,
+    output_json: str,
+    propagation_output_json: str,
+    lua_version: str = "Lua_547",
+    reference_db: str | None = None,
+    embedding_project_root: str = ".",
+) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        "scripts/14_build_runtime_propagation_suite.py",
+        "--retrieval-json",
+        str(_resolve_path(retrieval_json)),
+        "--anchor-json",
+        str(_resolve_path(anchor_json)),
+        "--output-json",
+        str(_resolve_path(output_json)),
+        "--lua-version",
+        lua_version,
+        "--embedding-project-root",
+        str(_resolve_path(embedding_project_root)),
+        "--propagation-output-json",
+        str(_resolve_path(propagation_output_json)),
+    ]
+    if reference_db:
+        command.extend(["--reference-db", str(_resolve_path(reference_db))])
     return _run_command(command)
 
 

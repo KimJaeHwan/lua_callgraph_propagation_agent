@@ -60,12 +60,14 @@ IDA/Ghidra decompile을 보고 사람이 확정한 함수 매핑을 `force_ancho
 binary target이면 보통 이 순서다.
 
 1. `extract_query_features`
-2. retrieval/seed/propagation 결과 확인 또는 개별 스크립트 실행
-3. `read_final_report`
-4. `list_deferred_cases`
-5. IDA/Ghidra에서 몇 개 확인
-6. `batch_register_force_anchors`
-7. `read_final_report`
+2. `bulk_query_retrieval`
+3. `select_seed_anchors`
+4. `build_runtime_suite`
+5. `read_final_report`
+6. `list_deferred_cases`
+7. IDA/Ghidra에서 몇 개 확인
+8. `batch_register_force_anchors`
+9. `read_final_report`
 
 ### B. 이미 feature가 있는 상태에서 분석할 때
 
@@ -89,6 +91,12 @@ binary target이면 보통 이 순서다.
 
 - 바이너리에서 feature만 뽑고 싶다
   - `extract_query_features`
+
+- retrieval 결과에서 자동 초기 anchor만 만들고 싶다
+  - `select_seed_anchors`
+
+- propagation 입력 JSON까지 만들고 싶다
+  - `build_runtime_suite`
 
 - deferred/conflict만 보고 싶다
   - `list_deferred_cases`
@@ -166,11 +174,13 @@ score가 높아 보여도 오탐일 수 있다.
 처음 MCP를 붙인 사람이 가장 먼저 익혀야 할 tool 조합:
 
 1. `extract_query_features`
-2. `read_final_report`
-3. `list_deferred_cases`
-4. `show_candidate_context`
-5. `batch_register_force_anchors`
-6. `run_downstream`
+2. `bulk_query_retrieval`
+3. `select_seed_anchors`
+4. `build_runtime_suite`
+5. `read_final_report`
+6. `show_candidate_context`
+7. `batch_register_force_anchors`
+8. `run_downstream`
 
 이 6개만 익혀도 analyst loop는 거의 돌릴 수 있다.
 

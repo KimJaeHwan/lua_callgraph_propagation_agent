@@ -7,6 +7,8 @@ Current `lua_callgraph_propagation_agent` MCP coverage after the libengine analy
 - Direct runtime steps
   - `extract_query_features`
   - `bulk_query_retrieval`
+  - `select_seed_anchors`
+  - `build_runtime_suite`
 - Report / triage helpers
   - `list_deferred_cases`
   - `read_final_report`
