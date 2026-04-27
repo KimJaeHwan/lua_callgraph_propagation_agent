@@ -470,7 +470,85 @@ NOISE_REFERENCE_NAMES: set[str] = {
     "separatetobefnz",       # 11 false matches
     "lua_topointer",         # 10 false matches
     "luaS_hashlongstr",      # 10 false matches
+    # ── Targeted retrieval noise (structural false positives) ─────────────────
+    "__stack_chk_fail",      # GCC stack canary, not a Lua function — multi-hit
 }
+
+
+def inject_targeted_anchors(
+    seed_anchors_path: Path,
+    targeted_json_path: Path,
+    min_vote_score: float = 0.75,
+    min_margin: float = 0.15,
+) -> int:
+    """
+    Read targeted_retrieval.json (from 12c) and inject high-confidence cases
+    into seed_anchors.json as 'targeted_retrieval' source entries.
+
+    Filters applied:
+      • vote_score >= min_vote_score  (structural confidence)
+      • margin     >= min_margin      (top-1 vs top-2 gap)
+      • ref_name not in NOISE_REFERENCE_NAMES
+      • dedup: at most one query func per reference name
+      • skip if query func already present in seed_anchors
+    """
+    if not targeted_json_path.exists():
+        print(f"  [WARN] targeted_retrieval.json not found: {targeted_json_path}")
+        return 0
+
+    targeted = load_json(targeted_json_path)
+    anchors  = load_json(seed_anchors_path)
+
+    existing_queries: set[str]       = {m["query_function_name"] for m in anchors.get("mappings", [])}
+    existing_refs:    dict[str, int] = defaultdict(int)
+    for m in anchors.get("mappings", []):
+        existing_refs[m["reference_function_name"]] += 1
+
+    added = 0
+    for case in targeted.get("cases", []):
+        preview = case.get("unique_topk_preview", [])
+        if not preview:
+            continue
+
+        top1   = preview[0]
+        score1 = float(top1.get("score_total", 0.0))
+        score2 = float(preview[1].get("score_total", 0.0)) if len(preview) > 1 else 0.0
+        margin = score1 - score2
+
+        qfunc    = case.get("query_func", "")
+        ref_name = top1.get("function_name", "")
+
+        if not qfunc or not ref_name:
+            continue
+        if score1 < min_vote_score or margin < min_margin:
+            continue
+        if qfunc in existing_queries:
+            continue
+        if ref_name in NOISE_REFERENCE_NAMES:
+            continue
+        if existing_refs[ref_name] >= 1:
+            continue  # dedup: keep only one query per reference name
+
+        anchors["mappings"].append({
+            "query_function_name":     qfunc,
+            "reference_function_name": ref_name,
+            "confidence":              round(score1, 4),
+            "source":                  "targeted_retrieval",
+            "status":                  "accepted",
+            "evidence": [
+                f"vote_score={score1:.4f}",
+                f"margin={margin:.4f}",
+                f"voter_count={case.get('voter_count', 0)}",
+            ],
+        })
+        existing_queries.add(qfunc)
+        existing_refs[ref_name] += 1
+        added += 1
+
+    print(f"\n[STEP 2b] Targeted anchors — injected {added} new entries")
+    if added:
+        save_json(seed_anchors_path, anchors)
+    return added
 
 
 def dedup_retrieval(retrieval_path: Path) -> None:
@@ -543,44 +621,67 @@ def run(label: str, cmd: list[str]) -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--result-dir", type=Path, required=True)
-    p.add_argument("--query-json", type=Path, required=True)
-    p.add_argument("--index", type=Path,
+    p.add_argument("--result-dir",    type=Path, required=True)
+    p.add_argument("--query-json",    type=Path, required=True)
+    p.add_argument("--index",         type=Path,
                    default=PROJECT_ROOT / "data/inputs/retrieval_indexes/Lua_536/x86_64/runtime")
+    p.add_argument("--reference-db",  type=Path,
+                   default=PROJECT_ROOT / "data/inputs/callgraphs/Lua_536/reference_callgraph.sqlite",
+                   help="Reference callgraph SQLite for targeted retrieval (12c).")
+    p.add_argument("--lua-version",   type=str, default="Lua_536",
+                   help="Lua version string used to filter reference DB edges (default Lua_536).")
     p.add_argument("--skip-retrieval", action="store_true",
-                   help="Skip re-retrieval (only patch features/anchors and re-propagate)")
+                   help="Skip embedding retrieval (uses existing retrieval_result.json).")
+    p.add_argument("--skip-targeted", action="store_true",
+                   help="Skip targeted retrieval step (12c_targeted_retrieval.py).")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    result_dir   = args.result_dir.resolve()
-    query_json   = args.query_json.resolve()
-    retrieval_json   = result_dir / "retrieval_result.json"
-    seed_anchors = result_dir / "seed_anchors.json"
-    suite_json   = result_dir / "suite.json"
-    prop_json    = result_dir / "propagation_result.json"
+    result_dir    = args.result_dir.resolve()
+    query_json    = args.query_json.resolve()
+    retrieval_json    = result_dir / "retrieval_result.json"
+    targeted_json     = result_dir / "targeted_retrieval.json"
+    seed_anchors  = result_dir / "seed_anchors.json"
+    suite_json    = result_dir / "suite.json"
+    prop_json     = result_dir / "propagation_result.json"
     deferred_json = result_dir / "deferred_analysis.json"
-    final_json   = result_dir / "final_mapping_report.json"
+    final_json    = result_dir / "final_mapping_report.json"
 
     PYTHON = sys.executable
 
     # ── 1. patch features ────────────────────────────────────────────────────
     patched_query = patch_features(query_json, CONFIRMED)
 
-    # ── 2. patch anchors ─────────────────────────────────────────────────────
+    # ── 2. patch anchors (force anchors from CONFIRMED dict) ─────────────────
     patch_anchors(seed_anchors, query_json, CONFIRMED)
 
     # ── 3. re-retrieval with patched features ────────────────────────────────
     if not args.skip_retrieval:
         run("12_retrieval_patched", [
             PYTHON, "scripts/12_run_bulk_query_retrieval.py",
-            "--query-json", str(patched_query),
-            "--index",      str(args.index),
+            "--query-json",  str(patched_query),
+            "--index",       str(args.index),
             "--output-json", str(retrieval_json),
         ])
     else:
         print("\n[SKIP] retrieval step (--skip-retrieval)")
+
+    # ── 3b. targeted retrieval (callgraph neighbor voting, no embeddings) ────
+    if not args.skip_targeted:
+        run("12c_targeted", [
+            PYTHON, "scripts/12c_targeted_retrieval.py",
+            "--query-json",   str(patched_query),
+            "--anchors-json", str(seed_anchors),
+            "--reference-db", str(args.reference_db),
+            "--output-json",  str(targeted_json),
+            "--lua-version",  args.lua_version,
+        ])
+        # ── 2b. inject targeted anchors into seed_anchors.json ───────────────
+        inject_targeted_anchors(seed_anchors, targeted_json)
+    else:
+        print("\n[SKIP] targeted retrieval step (--skip-targeted)")
 
     # ── 4. dedup retrieval ───────────────────────────────────────────────────
     dedup_retrieval(retrieval_json)

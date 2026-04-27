@@ -28,21 +28,29 @@ mcp = FastMCP(
         "embedding-model memory overlap. "
         "RECOMMENDED ANALYST LOOP for a stripped production binary (e.g. game engine): "
         "(1) extract_query_features — Ghidra feature extraction; "
-        "(2) bulk_query_retrieval — embedding + graph retrieval; "
-        "(3) detect_lua_scope — identify which functions belong to the Lua VM "
-        "    (avoids game-code false positives in seed selection); "
-        "(4) select_seed_anchors with scope_json from step 3 and dedup_max_per_ref=1 — "
-        "    builds clean, unambiguous seed anchors; "
-        "(5) build_runtime_suite → run_downstream — propagation + final report; "
-        "(6) get_mapping_distribution — spot noisy reference names (many:1 mappings); "
+        "(2) bulk_query_retrieval — full embedding+graph retrieval (wide net); "
+        "(3) detect_lua_scope — identify Lua VM functions via string-signal BFS "
+        "    (blocks game-code from polluting seed selection); "
+        "(4) select_seed_anchors with scope_json + dedup_max_per_ref=1 — "
+        "    clean 1:1 seeds only; "
+        "(5) build_runtime_suite → run_downstream — propagation round 1; "
+        "(6) get_mapping_distribution — detect noisy many:1 reference names; "
         "(7) update_noise_blacklist + run_downstream — strip noise, re-propagate; "
-        "(8) export_trusted_mappings → rename in IDA → batch_register_force_anchors — "
-        "    confirmed anchors feed next round; "
-        "(9) repeat from step 4 with patched features for best coverage. "
-        "Prefer batch_register_force_anchors over repeated single-anchor calls when several "
-        "mappings were confirmed in one reverse-engineering session."
+        "(8) export_trusted_mappings → rename in IDA → batch_register_force_anchors; "
+        "--- TARGETED RETRIEVAL (round N+1, requires confirmed anchors) --- "
+        "(9) patch_features_with_confirmed — inject real names into callee/caller lists; "
+        "(10) targeted_retrieval with patched features + seed_anchors as anchors_json — "
+        "     vote-based structural matching, no embeddings needed; "
+        "(11) select_seed_anchors again with targeted_json from step 10 — "
+        "     adds 'targeted_high_confidence' anchors at lower score threshold (0.75); "
+        "(12) run_downstream — propagation round 2 with denser anchor set; "
+        "(13) repeat from step 8 until convergence (0 new accepted per round). "
+        "KEY INSIGHT: targeted_retrieval uses callgraph structure (which functions call "
+        "which) to constrain candidates. 199 confirmed anchors × ~8 neighbors each = "
+        "~1600 structurally-constrained target functions, dramatically higher precision "
+        "than full retrieval. Works without sentence_transformers."
     ),
-    version="0.5.0",
+    version="0.6.0",
 )
 
 
@@ -161,6 +169,52 @@ def bulk_query_retrieval(
 
 @mcp.tool(
     description=(
+        "Targeted retrieval using callgraph neighbor constraints (no embedding model required). "
+        "For each unconfirmed query function that shares a callgraph edge with a confirmed anchor, "
+        "restricts the candidate pool to the reference callgraph neighbors of that anchor and "
+        "scores candidates by vote consensus. "
+        "vote_score = confirmed_neighbors_that_agree / total_confirmed_neighbors. "
+        "1.0 = unanimous consensus; 0.75 = 3 out of 4 neighbors agree. "
+        "Run AFTER a round of propagation has produced confirmed anchors (seed_anchors.json "
+        "or propagation_result.json), and BEFORE the next seed selection step. "
+        "query_json: patched feature JSON (use patch_features_with_confirmed first for best results). "
+        "anchors_json: seed_anchors.json or propagation_result.json — source of confirmed mappings. "
+        "reference_db: reference callgraph SQLite (edges table with src_name/dst_name). "
+        "output_json: where to write targeted_retrieval.json. "
+        "lua_version: filter reference DB by version (e.g. 'Lua_536') for cleaner neighbor sets. "
+        "min_vote_score: include only cases with vote_score >= this (default 0.0 = all, "
+        "use 0.75 for high-confidence only). "
+        "Passes output to select_seed_anchors via --targeted-json for dedup/scope gate filtering."
+    )
+)
+def targeted_retrieval(
+    query_json: str,
+    anchors_json: str,
+    reference_db: str,
+    output_json: str,
+    topk: int = 10,
+    min_vote_score: float = 0.0,
+    min_voters: int = 1,
+    lua_version: str | None = None,
+) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        "scripts/12c_targeted_retrieval.py",
+        "--query-json",     str(_resolve_path(query_json)),
+        "--anchors-json",   str(_resolve_path(anchors_json)),
+        "--reference-db",   str(_resolve_path(reference_db)),
+        "--output-json",    str(_resolve_path(output_json)),
+        "--topk",           str(topk),
+        "--min-vote-score", str(min_vote_score),
+        "--min-voters",     str(min_voters),
+    ]
+    if lua_version:
+        command.extend(["--lua-version", lua_version])
+    return _run_command(command)
+
+
+@mcp.tool(
+    description=(
         "Automatically detect which functions in a stripped binary are part of the embedded Lua VM, "
         "using Lua-specific string signal detection followed by bidirectional BFS callgraph expansion. "
         "This wraps scripts/12b_detect_lua_scope.py and produces a lua_scope.json file. "
@@ -208,7 +262,12 @@ def detect_lua_scope(
         "scope_min_confidence: minimum scope confidence to pass the gate — 'low' (default), 'medium', or 'high'. "
         "dedup_max_per_ref: reject reference names that attract more than this many query candidates. "
         "Default 1 = only allow 1:1 unambiguous mappings. Prevents noisy names (e.g. 'match', 'resume') "
-        "from becoming seeds when they match dozens of functions."
+        "from becoming seeds when they match dozens of functions. "
+        "--- Targeted retrieval integration --- "
+        "targeted_json: path to targeted_retrieval.json from targeted_retrieval(). When provided, "
+        "adds a third anchor source 'targeted_high_confidence' processed with its own lower thresholds. "
+        "targeted_min_score: minimum vote_score for targeted anchors (default 0.75). "
+        "targeted_min_margin: minimum top1-top2 gap for targeted anchors (default 0.15)."
     )
 )
 def select_seed_anchors(
@@ -221,16 +280,21 @@ def select_seed_anchors(
     scope_json: str | None = None,
     scope_min_confidence: str = "low",
     dedup_max_per_ref: int = 1,
+    targeted_json: str | None = None,
+    targeted_min_score: float = 0.75,
+    targeted_min_margin: float = 0.15,
 ) -> dict[str, Any]:
     command = [
         sys.executable,
         "scripts/13_select_seed_anchors.py",
-        "--retrieval-json",      str(_resolve_path(retrieval_json)),
-        "--output-json",         str(_resolve_path(output_json)),
-        "--min-top1-score",      str(min_top1_score),
-        "--min-margin",          str(min_margin),
-        "--dedup-max-per-ref",   str(dedup_max_per_ref),
+        "--retrieval-json",       str(_resolve_path(retrieval_json)),
+        "--output-json",          str(_resolve_path(output_json)),
+        "--min-top1-score",       str(min_top1_score),
+        "--min-margin",           str(min_margin),
+        "--dedup-max-per-ref",    str(dedup_max_per_ref),
         "--scope-min-confidence", scope_min_confidence,
+        "--targeted-min-score",   str(targeted_min_score),
+        "--targeted-min-margin",  str(targeted_min_margin),
     ]
     if query_json:
         command.extend(["--query-json",    str(_resolve_path(query_json))])
@@ -238,6 +302,8 @@ def select_seed_anchors(
         command.extend(["--reference-db",  str(_resolve_path(reference_db))])
     if scope_json:
         command.extend(["--scope-json",    str(_resolve_path(scope_json))])
+    if targeted_json:
+        command.extend(["--targeted-json", str(_resolve_path(targeted_json))])
     return _run_command(command)
 
 

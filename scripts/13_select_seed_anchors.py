@@ -95,6 +95,23 @@ def parse_args() -> argparse.Namespace:
              "Use 'medium' or 'high' to be more conservative.",
     )
 
+    # Targeted retrieval (12c output)
+    parser.add_argument(
+        "--targeted-json", type=Path, default=None,
+        help="Targeted retrieval JSON from 12c_targeted_retrieval.py. "
+             "Processed as a third anchor source ('targeted_high_confidence') "
+             "with its own, lower score threshold.",
+    )
+    parser.add_argument(
+        "--targeted-min-score", type=float, default=0.75,
+        help="Minimum vote_score for targeted_high_confidence anchors (default 0.75). "
+             "Lower than regular retrieval threshold since structural evidence is strong.",
+    )
+    parser.add_argument(
+        "--targeted-min-margin", type=float, default=0.15,
+        help="Minimum score gap between top-1 and top-2 targeted candidates (default 0.15).",
+    )
+
     # Visible-name detection
     parser.add_argument(
         "--query-json", type=Path, default=None,
@@ -340,26 +357,116 @@ def main() -> None:
     print(f"         rejected (ambiguous ref):  {dedup_rejected_ambiguous}")
     print(f"         accepted (1:1 after dedup): {dedup_accepted}")
 
+    # ── 4b. Targeted retrieval anchors (12c output, optional) ────────────────
+    #   Processed AFTER regular retrieval so already_query_funcs stays fresh.
+    already_query_funcs = (
+        already_query_funcs
+        | {a["query_function_name"] for a in retrieval_anchors}
+    )
+
+    targeted_anchors: list[dict] = []
+    if args.targeted_json and args.targeted_json.exists():
+        targeted_source = load_json(args.targeted_json)
+        targeted_raw: list[dict] = []
+        targeted_rejected_scope = 0
+        targeted_rejected_threshold = 0
+
+        for case in targeted_source.get("cases", []):
+            preview = case.get("unique_topk_preview", [])
+            if not preview:
+                continue
+            top1   = preview[0]
+            score1 = float(top1.get("score_total", 0.0))
+            score2 = float(preview[1].get("score_total", 0.0)) if len(preview) > 1 else 0.0
+            margin = score1 - score2
+            qfunc    = case.get("query_func")
+            ref_name = top1.get("function_name")
+
+            if not qfunc or not ref_name:
+                continue
+            if qfunc in already_query_funcs:
+                continue
+
+            # Threshold gate (lower bar than regular retrieval)
+            if score1 < args.targeted_min_score or margin < args.targeted_min_margin:
+                targeted_rejected_threshold += 1
+                continue
+
+            # Scope gate (same as regular retrieval)
+            if lua_scope is not None and qfunc not in lua_scope:
+                targeted_rejected_scope += 1
+                continue
+
+            targeted_raw.append({
+                "query_func":   qfunc,
+                "ref_func":     ref_name,
+                "score":        score1,
+                "margin":       margin,
+                "voter_count":  case.get("voter_count", 0),
+            })
+
+        # Dedup-first (same policy as regular retrieval)
+        targeted_ref_to_cands: dict[str, list[dict]] = defaultdict(list)
+        for cand in targeted_raw:
+            targeted_ref_to_cands[cand["ref_func"]].append(cand)
+
+        targeted_dedup_rejected = 0
+        targeted_dedup_accepted = 0
+        for ref_name, candidates in targeted_ref_to_cands.items():
+            if len(candidates) > args.dedup_max_per_ref:
+                targeted_dedup_rejected += 1
+                continue
+            best = max(candidates, key=lambda c: c["score"])
+            if best["query_func"] in already_query_funcs:
+                continue
+            targeted_anchors.append({
+                "query_function_name":     best["query_func"],
+                "reference_function_name": ref_name,
+                "confidence":              round(best["score"], 6),
+                "source":                  "targeted_high_confidence",
+                "status":                  "accepted",
+                "evidence": [
+                    f"vote_score={best['score']:.6f}",
+                    f"margin={best['margin']:.6f}",
+                    f"voter_count={best['voter_count']}",
+                ],
+            })
+            targeted_dedup_accepted += 1
+
+        print(f"[INFO] targeted retrieval results:")
+        print(f"         raw cases:                  {len(targeted_raw)}")
+        print(f"         rejected (threshold):       {targeted_rejected_threshold}")
+        if lua_scope is not None:
+            print(f"         rejected (scope gate):     {targeted_rejected_scope}")
+        print(f"         rejected (ambiguous ref):   {targeted_dedup_rejected}")
+        print(f"         accepted:                   {targeted_dedup_accepted}")
+    elif args.targeted_json:
+        print(f"[WARN] --targeted-json not found: {args.targeted_json} — skipped")
+
     # ── 5. Assemble and save ──────────────────────────────────────────────────
-    mappings = preserved_anchors + visible_anchors + retrieval_anchors
+    mappings = preserved_anchors + visible_anchors + retrieval_anchors + targeted_anchors
 
     output = {
         "schema_version": "0.1",
-        "description": "Auto-selected seed anchors (dedup-first + optional scope gate).",
+        "description": "Auto-selected seed anchors (dedup-first + optional scope gate + targeted).",
         "thresholds": {
-            "min_top1_score":     args.min_top1_score,
-            "min_margin":         args.min_margin,
-            "dedup_max_per_ref":  args.dedup_max_per_ref,
-            "scope_json":         str(args.scope_json) if args.scope_json else None,
+            "min_top1_score":       args.min_top1_score,
+            "min_margin":           args.min_margin,
+            "dedup_max_per_ref":    args.dedup_max_per_ref,
+            "scope_json":           str(args.scope_json) if args.scope_json else None,
             "scope_min_confidence": args.scope_min_confidence,
+            "targeted_json":        str(args.targeted_json) if args.targeted_json else None,
+            "targeted_min_score":   args.targeted_min_score,
+            "targeted_min_margin":  args.targeted_min_margin,
         },
         "stats": {
-            "preserved":          len(preserved_anchors),
-            "visible":            len(visible_anchors),
-            "retrieval_raw":      len(raw_candidates),
+            "preserved":                    len(preserved_anchors),
+            "visible":                      len(visible_anchors),
+            "retrieval_raw":                len(raw_candidates),
             "retrieval_rejected_scope":     rejected_scope,
             "retrieval_rejected_ambiguous": dedup_rejected_ambiguous,
-            "retrieval_accepted": dedup_accepted,
+            "retrieval_accepted":           dedup_accepted,
+            "targeted_accepted":            len(targeted_anchors),
         },
         "mappings": mappings,
     }
@@ -372,7 +479,8 @@ def main() -> None:
     print(f"[INFO] total anchors: {len(mappings)}"
           f"  (preserved={len(preserved_anchors)}"
           f", visible={len(visible_anchors)}"
-          f", retrieval={len(retrieval_anchors)})")
+          f", retrieval={len(retrieval_anchors)}"
+          f", targeted={len(targeted_anchors)})")
 
 
 if __name__ == "__main__":
