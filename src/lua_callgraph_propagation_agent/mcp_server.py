@@ -25,18 +25,24 @@ mcp = FastMCP(
         "Use this MCP to drive the deterministic Lua runtime name-mapping workflow with "
         "phase-separated execution only. Do not rely on scripts/10_run_name_mapping_pipeline.py "
         "from MCP, because extraction and analysis must stay split to avoid Ghidra JVM and "
-        "embedding-model memory overlap. Preferred analyst loop: "
-        "(1) extract features with extract_query_features when starting from a binary; "
-        "(2) run retrieval and seed/propagation steps explicitly or inspect existing results; "
-        "(3) inspect results with read_final_report, list_deferred_cases, "
-        "read_mapping_record, read_propagation_summary, or show_candidate_context; "
-        "(4) after manual decompile validation, register_force_anchor or "
-        "batch_register_force_anchors; "
-        "(5) if anchors were edited manually, call run_downstream. "
+        "embedding-model memory overlap. "
+        "RECOMMENDED ANALYST LOOP for a stripped production binary (e.g. game engine): "
+        "(1) extract_query_features — Ghidra feature extraction; "
+        "(2) bulk_query_retrieval — embedding + graph retrieval; "
+        "(3) detect_lua_scope — identify which functions belong to the Lua VM "
+        "    (avoids game-code false positives in seed selection); "
+        "(4) select_seed_anchors with scope_json from step 3 and dedup_max_per_ref=1 — "
+        "    builds clean, unambiguous seed anchors; "
+        "(5) build_runtime_suite → run_downstream — propagation + final report; "
+        "(6) get_mapping_distribution — spot noisy reference names (many:1 mappings); "
+        "(7) update_noise_blacklist + run_downstream — strip noise, re-propagate; "
+        "(8) export_trusted_mappings → rename in IDA → batch_register_force_anchors — "
+        "    confirmed anchors feed next round; "
+        "(9) repeat from step 4 with patched features for best coverage. "
         "Prefer batch_register_force_anchors over repeated single-anchor calls when several "
         "mappings were confirmed in one reverse-engineering session."
     ),
-    version="0.4.0",
+    version="0.5.0",
 )
 
 
@@ -155,14 +161,54 @@ def bulk_query_retrieval(
 
 @mcp.tool(
     description=(
+        "Automatically detect which functions in a stripped binary are part of the embedded Lua VM, "
+        "using Lua-specific string signal detection followed by bidirectional BFS callgraph expansion. "
+        "This wraps scripts/12b_detect_lua_scope.py and produces a lua_scope.json file. "
+        "Run this BEFORE select_seed_anchors so the scope gate can filter out game-code false positives. "
+        "query_json: path to the extracted feature JSON (or extract_manifest). "
+        "output_json: where to write lua_scope.json. "
+        "bfs_depth: how many callgraph hops to expand from string-signal seeds (default 4). "
+        "max_pcode_instructions: exclude functions larger than this (default 8000 — very large = game code). "
+        "Returns the subprocess output including string_signal_count and lua_scope_count. "
+        "Typical result: ~600-1000 functions flagged as Lua scope in a 16k-function binary."
+    )
+)
+def detect_lua_scope(
+    query_json: str,
+    output_json: str,
+    bfs_depth: int = 4,
+    max_pcode_instructions: int = 8000,
+    min_string_signals: int = 1,
+) -> dict[str, Any]:
+    return _run_command([
+        sys.executable,
+        "scripts/12b_detect_lua_scope.py",
+        "--query-json",        str(_resolve_path(query_json)),
+        "--output-json",       str(_resolve_path(output_json)),
+        "--bfs-depth",         str(bfs_depth),
+        "--max-pcode-instructions", str(max_pcode_instructions),
+        "--min-string-signals", str(min_string_signals),
+    ])
+
+
+@mcp.tool(
+    description=(
         "Select initial seed anchors from retrieval_result.json using deterministic confidence rules. "
         "This wraps scripts/13_select_seed_anchors.py and produces seed_anchors.json. "
-        "Use this after bulk_query_retrieval and before build_runtime_suite. "
+        "Use this after bulk_query_retrieval (and optionally detect_lua_scope) and before build_runtime_suite. "
         "retrieval_json: path to retrieval_result.json. "
         "output_json: where to write seed_anchors.json. "
         "query_json: optional query feature JSON or extract_manifest for visible-name anchor detection. "
         "reference_db: optional reference callgraph DB used to validate visible names. "
-        "min_top1_score and min_margin control retrieval_high_confidence anchor selection."
+        "min_top1_score and min_margin control retrieval_high_confidence anchor selection. "
+        "--- NEW anti-noise parameters --- "
+        "scope_json: path to lua_scope.json from detect_lua_scope. When provided, only functions "
+        "inside the detected Lua scope can become retrieval_high_confidence seeds, blocking game-code "
+        "false positives from poisoning the seed set. Highly recommended for stripped production binaries. "
+        "scope_min_confidence: minimum scope confidence to pass the gate — 'low' (default), 'medium', or 'high'. "
+        "dedup_max_per_ref: reject reference names that attract more than this many query candidates. "
+        "Default 1 = only allow 1:1 unambiguous mappings. Prevents noisy names (e.g. 'match', 'resume') "
+        "from becoming seeds when they match dozens of functions."
     )
 )
 def select_seed_anchors(
@@ -172,23 +218,26 @@ def select_seed_anchors(
     min_margin: float = 0.05,
     query_json: str | None = None,
     reference_db: str | None = None,
+    scope_json: str | None = None,
+    scope_min_confidence: str = "low",
+    dedup_max_per_ref: int = 1,
 ) -> dict[str, Any]:
     command = [
         sys.executable,
         "scripts/13_select_seed_anchors.py",
-        "--retrieval-json",
-        str(_resolve_path(retrieval_json)),
-        "--output-json",
-        str(_resolve_path(output_json)),
-        "--min-top1-score",
-        str(min_top1_score),
-        "--min-margin",
-        str(min_margin),
+        "--retrieval-json",      str(_resolve_path(retrieval_json)),
+        "--output-json",         str(_resolve_path(output_json)),
+        "--min-top1-score",      str(min_top1_score),
+        "--min-margin",          str(min_margin),
+        "--dedup-max-per-ref",   str(dedup_max_per_ref),
+        "--scope-min-confidence", scope_min_confidence,
     ]
     if query_json:
-        command.extend(["--query-json", str(_resolve_path(query_json))])
+        command.extend(["--query-json",    str(_resolve_path(query_json))])
     if reference_db:
-        command.extend(["--reference-db", str(_resolve_path(reference_db))])
+        command.extend(["--reference-db",  str(_resolve_path(reference_db))])
+    if scope_json:
+        command.extend(["--scope-json",    str(_resolve_path(scope_json))])
     return _run_command(command)
 
 

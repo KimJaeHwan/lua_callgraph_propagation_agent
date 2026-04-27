@@ -2,13 +2,47 @@
 """
 Select high-confidence seed anchors from bulk retrieval output.
 
-This gives the propagation step a deterministic starting point when a real
-binary has no manually prepared anchor file yet.
-
 Two anchor sources (in priority order):
-  1. name_visible  — query functions whose names were NOT stripped and match a
-                     known Lua reference function name.  Confidence = 1.0.
-  2. retrieval_high_confidence — retrieval top-1 score above threshold.
+  1. name_visible             — query functions whose names were NOT stripped
+                                and match a known Lua reference function name.
+                                Confidence = 1.0.
+  2. retrieval_high_confidence — retrieval top-1 score above threshold, after
+                                 dedup-first filtering and optional scope gating.
+
+Key improvements over the original version
+-------------------------------------------
+DEDUP-FIRST (always enabled)
+  The original version accepted every query function that crossed the score
+  threshold, even if many functions all mapped to the same reference name.
+  This caused reference names like 'luaD_poscall' or 'match' to appear as
+  seed anchors for dozens of game-code functions, poisoning propagation.
+
+  Now: after collecting all threshold-passing candidates, we keep at most ONE
+  per reference name — the highest-scoring query function.  Any reference name
+  that appears more than --dedup-max-per-ref times in the raw candidates is
+  treated as inherently ambiguous and rejected entirely.
+
+SCOPE GATE (optional, --scope-json)
+  If a Lua scope JSON produced by 12b_detect_lua_scope.py is provided, only
+  query functions that appear in that scope are eligible for
+  retrieval_high_confidence anchors.  This prevents game-code functions from
+  ever becoming seeds, regardless of how high their retrieval score is.
+
+Usage
+-----
+  # Minimal (original behaviour, but with dedup-first)
+  python scripts/13_select_seed_anchors.py \\
+      --retrieval-json data/runtime/results/.../retrieval_result.json \\
+      --output-json    data/runtime/results/.../seed_anchors.json
+
+  # Recommended (dedup + scope gate)
+  python scripts/13_select_seed_anchors.py \\
+      --retrieval-json data/runtime/results/.../retrieval_result.json \\
+      --output-json    data/runtime/results/.../seed_anchors.json \\
+      --scope-json     data/runtime/results/.../lua_scope.json \\
+      --scope-min-confidence medium \\
+      --query-json     data/runtime/query_features/.../libengine.json \\
+      --reference-db   data/inputs/callgraphs/Lua_536/reference_callgraph.sqlite
 """
 
 from __future__ import annotations
@@ -17,13 +51,16 @@ import argparse
 import json
 import re
 import sqlite3
+from collections import defaultdict
 from pathlib import Path
 
-# Ghidra auto-generated names that indicate the symbol was stripped
 _GHIDRA_STRIPPED = re.compile(
     r"^(FUN_|thunk_FUN_|DAT_|LAB_|UNK_|PTR_|ARRAY_|SWITCH_|CASE_|BYTE_|WORD_|DWORD_|QWORD_)",
     re.IGNORECASE,
 )
+
+# Confidence ordering for scope gate filtering
+_CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,29 +68,51 @@ def parse_args() -> argparse.Namespace:
         description="Build seed anchors from retrieval confidence thresholds."
     )
     parser.add_argument("--retrieval-json", type=Path, required=True)
-    parser.add_argument("--output-json", type=Path, required=True)
+    parser.add_argument("--output-json",    type=Path, required=True)
     parser.add_argument("--min-top1-score", type=float, default=0.92)
-    parser.add_argument("--min-margin", type=float, default=0.05)
-    # optional: visible-name detection
+    parser.add_argument("--min-margin",     type=float, default=0.05)
+
+    # Dedup-first
     parser.add_argument(
-        "--query-json",
-        type=Path,
-        default=None,
-        help="Query feature JSON produced by the extractor (contains function_name per func)",
+        "--dedup-max-per-ref", type=int, default=1,
+        help="Maximum number of query functions allowed to map to the same "
+             "reference name as retrieval_high_confidence seeds. "
+             "Reference names with more raw candidates than this are rejected. "
+             "Default 1 (strictest: keep only unambiguous 1:1 mappings).",
+    )
+
+    # Scope gate
+    parser.add_argument(
+        "--scope-json", type=Path, default=None,
+        help="Lua scope JSON from 12b_detect_lua_scope.py.  "
+             "When provided, only functions in this scope are eligible for "
+             "retrieval_high_confidence seed selection.",
     )
     parser.add_argument(
-        "--reference-db",
-        type=Path,
-        default=None,
-        help="Reference callgraph SQLite DB for validating visible names",
+        "--scope-min-confidence", default="low",
+        choices=["high", "medium", "low"],
+        help="Minimum scope confidence level to pass the gate (default: low). "
+             "Use 'medium' or 'high' to be more conservative.",
+    )
+
+    # Visible-name detection
+    parser.add_argument(
+        "--query-json", type=Path, default=None,
+        help="Query feature JSON for visible-name anchor detection.",
+    )
+    parser.add_argument(
+        "--reference-db", type=Path, default=None,
+        help="Reference callgraph SQLite DB for validating visible names.",
     )
     return parser.parse_args()
 
 
 def load_json(path: Path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
+
+# ── Visible-name helpers (unchanged) ──────────────────────────────────────────
 
 def _load_reference_names(db_path: Path) -> set[str]:
     con = sqlite3.connect(str(db_path))
@@ -61,7 +120,6 @@ def _load_reference_names(db_path: Path) -> set[str]:
         cur = con.execute("SELECT DISTINCT function_name FROM functions")
         return {row[0] for row in cur.fetchall()}
     except Exception:
-        # fallback: try nodes table used by some schema versions
         try:
             cur = con.execute("SELECT DISTINCT name FROM nodes")
             return {row[0] for row in cur.fetchall()}
@@ -86,13 +144,7 @@ def detect_visible_name_anchors(
         return []
 
     query_data = load_json(query_json_path)
-    # Three supported formats:
-    #   1. extract_manifest  — {"feature_files": ["/abs/path/feat.json", ...], ...}
-    #      Each feature file is a list of function-record dicts.
-    #   2. plain list        — [{"function_name": ..., ...}, ...]
-    #   3. wrapped object    — {"functions": [...]} or {"results": [...]}
     if isinstance(query_data, dict) and "feature_files" in query_data:
-        # expand all feature files listed in the manifest
         functions: list[dict] = []
         for ff_path_str in query_data.get("feature_files", []):
             ff_path = Path(ff_path_str)
@@ -108,7 +160,7 @@ def detect_visible_name_anchors(
                 functions.extend(ff_data)
             else:
                 functions.extend(ff_data.get("functions", ff_data.get("results", [])))
-        print(f"[INFO] loaded {len(functions)} function records from {len(query_data.get('feature_files', []))} feature file(s)")
+        print(f"[INFO] loaded {len(functions)} function records from manifest")
     elif isinstance(query_data, list):
         functions = query_data
     else:
@@ -117,71 +169,65 @@ def detect_visible_name_anchors(
     anchors: list[dict] = []
     for func in functions:
         name = func.get("function_name", "")
-        if not name:
+        if not name or _is_ghidra_stripped(name) or name in already_registered:
             continue
-        # skip Ghidra auto-generated names (stripped)
-        if _is_ghidra_stripped(name):
-            continue
-        if name in already_registered:
-            continue
-
         if name not in reference_names:
             continue
-
-        anchors.append(
-            {
-                # Runtime propagation resolves query-side anchors by the
-                # extractor's function_name field, not entry_point.
-                "query_function_name": name,
-                "reference_function_name": name,
-                "confidence": 1.0,
-                "source": "name_visible",
-                "status": "accepted",
-                "evidence": [f"ghidra_symbol_name_exact_match: {name}"],
-            }
-        )
+        anchors.append({
+            "query_function_name": name,
+            "reference_function_name": name,
+            "confidence": 1.0,
+            "source": "name_visible",
+            "status": "accepted",
+            "evidence": [f"ghidra_symbol_name_exact_match: {name}"],
+        })
 
     print(f"[INFO] visible-name anchors detected: {len(anchors)}")
     return anchors
 
 
 def _load_preserved_anchors(output_json: Path) -> list[dict]:
-    """Load force_anchor entries from an existing seed_anchors file to preserve them.
-
-    Only entries whose source is NOT one of the auto-generated sources are
-    kept — this prevents stale retrieval/visible-name entries from surviving
-    across re-runs while keeping manually registered force anchors intact.
-    """
     AUTO_SOURCES = {"retrieval_high_confidence", "name_visible"}
     if not output_json.exists():
         return []
     try:
         data = load_json(output_json)
-        preserved = [
+        return [
             m for m in data.get("mappings", [])
             if m.get("source") not in AUTO_SOURCES and m.get("status") == "accepted"
         ]
-        return preserved
     except Exception as exc:
         print(f"[WARN] could not read existing anchor file ({exc}); starting fresh")
         return []
 
 
+# ── Scope gate helper ──────────────────────────────────────────────────────────
+
+def _load_scope_set(scope_json_path: Path, min_confidence: str) -> set[str]:
+    """Return the set of function names that pass the scope confidence gate."""
+    data = load_json(scope_json_path)
+    min_rank = _CONFIDENCE_RANK.get(min_confidence, 1)
+    scope_funcs = data.get("functions", {})
+    return {
+        name
+        for name, info in scope_funcs.items()
+        if _CONFIDENCE_RANK.get(info.get("confidence", "low"), 1) >= min_rank
+    }
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+
 def main() -> None:
     args = parse_args()
     source = load_json(args.retrieval_json)
 
-    # ── 0. Preserve manually registered anchors (e.g. force_anchor) ─────────
-    #   These must survive re-runs of this script so that run_analysis does
-    #   not wipe out anchors registered via register_force_anchor /
-    #   batch_register_force_anchors.
+    # ── 0. Preserve manually registered anchors ───────────────────────────────
     preserved_anchors = _load_preserved_anchors(args.output_json)
     preserved_names   = {m["query_function_name"] for m in preserved_anchors}
     if preserved_anchors:
-        print(f"[INFO] preserving {len(preserved_anchors)} manually registered anchor(s) "
-              f"(sources: {sorted({m.get('source') for m in preserved_anchors})})")
+        print(f"[INFO] preserving {len(preserved_anchors)} manually registered anchor(s)")
 
-    # ── 1. Visible-name anchors (confidence 1.0, highest priority) ──────────
+    # ── 1. Visible-name anchors (confidence 1.0) ──────────────────────────────
     visible_anchors: list[dict] = []
     if args.query_json and args.reference_db:
         if args.query_json.exists() and args.reference_db.exists():
@@ -197,44 +243,123 @@ def main() -> None:
 
     already_query_funcs = preserved_names | {a["query_function_name"] for a in visible_anchors}
 
-    # ── 2. Retrieval-based anchors ───────────────────────────────────────────
-    retrieval_anchors: list[dict] = []
+    # ── 2. Load scope gate (optional) ────────────────────────────────────────
+    lua_scope: set[str] | None = None
+    if args.scope_json and args.scope_json.exists():
+        lua_scope = _load_scope_set(args.scope_json, args.scope_min_confidence)
+        print(f"[INFO] scope gate loaded: {len(lua_scope)} functions "
+              f"(min_confidence={args.scope_min_confidence})")
+    elif args.scope_json:
+        print(f"[WARN] --scope-json not found: {args.scope_json} — scope gate disabled")
+
+    # ── 3. Collect raw retrieval candidates ───────────────────────────────────
+    #   Collect ALL threshold-passing candidates first, before any dedup.
+    raw_candidates: list[dict] = []
+    rejected_scope = 0
+    rejected_threshold = 0
+
     for case in source.get("cases", []):
         preview = case.get("unique_topk_preview", [])
         if not preview:
             continue
-        top1 = preview[0]
+
+        top1   = preview[0]
         score1 = float(top1.get("score_total", 0.0))
         score2 = float(preview[1].get("score_total", 0.0)) if len(preview) > 1 else 0.0
         margin = score1 - score2
-        if score1 < args.min_top1_score or margin < args.min_margin:
+
+        qfunc    = case.get("query_func")
+        ref_name = top1.get("function_name")
+
+        if not qfunc or not ref_name:
             continue
-        qfunc = case.get("query_func")
         if qfunc in already_query_funcs:
             continue
-        retrieval_anchors.append(
-            {
-                "query_function_name": qfunc,
-                "reference_function_name": top1.get("function_name"),
-                "confidence": round(score1, 6),
-                "source": "retrieval_high_confidence",
-                "status": "accepted",
-                "evidence": [
-                    f"top1_score={score1:.6f}",
-                    f"top1_margin={margin:.6f}",
-                ],
-            }
-        )
 
-    # preserved → visible → retrieval  (firmest seeds first)
+        # Threshold gate
+        if score1 < args.min_top1_score or margin < args.min_margin:
+            rejected_threshold += 1
+            continue
+
+        # Scope gate
+        if lua_scope is not None and qfunc not in lua_scope:
+            rejected_scope += 1
+            continue
+
+        raw_candidates.append({
+            "query_func": qfunc,
+            "ref_func":   ref_name,
+            "score":      score1,
+            "margin":     margin,
+        })
+
+    print(f"[INFO] raw candidates passing threshold: {len(raw_candidates)}")
+    if lua_scope is not None:
+        print(f"[INFO] rejected by scope gate: {rejected_scope}")
+
+    # ── 4. DEDUP-FIRST: keep best query per reference name ───────────────────
+    #   Group by reference name, keep highest-scoring query.
+    #   Reject if a reference name has more than dedup_max_per_ref candidates
+    #   (highly ambiguous → likely noise).
+    ref_to_candidates: dict[str, list[dict]] = defaultdict(list)
+    for cand in raw_candidates:
+        ref_to_candidates[cand["ref_func"]].append(cand)
+
+    retrieval_anchors: list[dict] = []
+    dedup_rejected_ambiguous = 0
+    dedup_accepted = 0
+
+    for ref_name, candidates in ref_to_candidates.items():
+        if len(candidates) > args.dedup_max_per_ref:
+            # Too many query functions match this reference name → noise
+            dedup_rejected_ambiguous += 1
+            continue
+
+        # Keep the highest-scoring candidate for this reference name
+        best = max(candidates, key=lambda c: c["score"])
+
+        if best["query_func"] in already_query_funcs:
+            continue
+
+        retrieval_anchors.append({
+            "query_function_name":     best["query_func"],
+            "reference_function_name": ref_name,
+            "confidence":              round(best["score"], 6),
+            "source":                  "retrieval_high_confidence",
+            "status":                  "accepted",
+            "evidence": [
+                f"top1_score={best['score']:.6f}",
+                f"top1_margin={best['margin']:.6f}",
+                f"dedup_candidates={len(candidates)}",
+            ],
+        })
+        dedup_accepted += 1
+
+    print(f"[INFO] dedup-first results:")
+    print(f"         raw candidates:            {len(raw_candidates)}")
+    print(f"         rejected (ambiguous ref):  {dedup_rejected_ambiguous}")
+    print(f"         accepted (1:1 after dedup): {dedup_accepted}")
+
+    # ── 5. Assemble and save ──────────────────────────────────────────────────
     mappings = preserved_anchors + visible_anchors + retrieval_anchors
 
     output = {
         "schema_version": "0.1",
-        "description": "Auto-selected seed anchors (name_visible + retrieval_high_confidence).",
+        "description": "Auto-selected seed anchors (dedup-first + optional scope gate).",
         "thresholds": {
-            "min_top1_score": args.min_top1_score,
-            "min_margin": args.min_margin,
+            "min_top1_score":     args.min_top1_score,
+            "min_margin":         args.min_margin,
+            "dedup_max_per_ref":  args.dedup_max_per_ref,
+            "scope_json":         str(args.scope_json) if args.scope_json else None,
+            "scope_min_confidence": args.scope_min_confidence,
+        },
+        "stats": {
+            "preserved":          len(preserved_anchors),
+            "visible":            len(visible_anchors),
+            "retrieval_raw":      len(raw_candidates),
+            "retrieval_rejected_scope":     rejected_scope,
+            "retrieval_rejected_ambiguous": dedup_rejected_ambiguous,
+            "retrieval_accepted": dedup_accepted,
         },
         "mappings": mappings,
     }
@@ -244,12 +369,10 @@ def main() -> None:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     print(f"[OK] saved seed anchors: {args.output_json}")
-    print(
-        f"[INFO] total anchors: {len(mappings)}"
-        f"  (preserved={len(preserved_anchors)}"
-        f", visible={len(visible_anchors)}"
-        f", retrieval={len(retrieval_anchors)})"
-    )
+    print(f"[INFO] total anchors: {len(mappings)}"
+          f"  (preserved={len(preserved_anchors)}"
+          f", visible={len(visible_anchors)}"
+          f", retrieval={len(retrieval_anchors)})")
 
 
 if __name__ == "__main__":
