@@ -12,6 +12,59 @@
 - deferred 분석 payload 생성
 - FastMCP 서버로 analyst 개입용 tool interface 제공
 
+## 설치
+
+```bash
+pip install -e .
+```
+
+`pyproject.toml`에 `sentence-transformers`가 의존성으로 등록되어 있어 위 명령어 한 번으로 설치된다.  
+단, PyTorch를 함께 끌어오기 때문에 **설치 용량 2~3 GB, 소요 시간 5~15분** 정도를 예상한다.
+
+### sentence_transformers 미설치 시 동작
+
+| 단계 | 설치 여부 | 동작 |
+|------|-----------|------|
+| `12_run_bulk_query_retrieval.py` | **필수** | 없으면 즉시 crash |
+| 나머지 모든 스크립트 (13~17, 04, 05, 15) | 불필요 | 정상 동작 |
+| `12c_targeted_retrieval.py` | 불필요 | 정상 동작 (embedding 없이 구조 기반 검색) |
+
+> **주의**: `sentence-transformers`가 설치되지 않은 상태에서 `17_patch_and_rerun.py`를 실행하면  
+> retrieval 단계가 crash 한다. 이때는 `--skip-retrieval` 플래그로 우회한다.  
+> 단, `--skip-retrieval`을 쓰면 기존 `retrieval_result.json`을 재사용하므로  
+> 확정된 함수 이름(patched feature)이 retrieval에 반영되지 않는다.  
+> **가능하면 설치 후 최소 1회 fresh retrieval을 돌리는 것을 강력히 권장한다.**
+
+### 권장 전체 파이프라인 (설치 후)
+
+```bash
+# 1. Lua 스코프 탐지 (embedding 불필요)
+python scripts/12b_detect_lua_scope.py \
+  --query-json data/runtime/query_features/.../libengine_patched.json \
+  --output-json data/runtime/results/<session>/lua_scope.json
+
+# 2. 스코프 필터 적용 retrieval (핵심: 16k → ~800개만 encoding)
+python scripts/12_run_bulk_query_retrieval.py \
+  --query-json data/runtime/query_features/.../libengine_patched.json \
+  --index data/inputs/retrieval_indexes/Lua_536/x86_64/runtime \
+  --scope-json data/runtime/results/<session>/lua_scope.json \
+  --output-json data/runtime/results/<session>/retrieval_result.json
+
+# 3. seed 선택 (dedup-first + scope gate + targeted)
+python scripts/13_select_seed_anchors.py \
+  --retrieval-json .../retrieval_result.json \
+  --output-json .../seed_anchors.json \
+  --scope-json .../lua_scope.json \
+  --targeted-json .../targeted_retrieval.json
+
+# 또는 17_patch_and_rerun.py 한 번에:
+python scripts/17_patch_and_rerun.py \
+  --result-dir data/runtime/results/<session> \
+  --query-json .../libengine_patched.json \
+  --lua-version Lua_536
+  # (scope JSON이 result-dir에 있으면 자동 적용)
+```
+
 ## 런타임 구성
 
 | 역할 | 경로 |
@@ -85,15 +138,17 @@ MCP에서는 extraction과 downstream 단계를 직접 호출하는 방식만 �
 python scripts/20_run_mcp_server.py
 ```
 
-### 제공 툴 목록
+### 제공 툴 목록 (v0.6.0 기준)
 
 #### 실행 / 분석
 
 | 툴 | 설명 |
 |----|------|
 | `extract_query_features` | 단일 바이너리 Ghidra feature 추출 |
-| `bulk_query_retrieval` | feature manifest → retrieval top-k 생성 |
-| `select_seed_anchors` | retrieval 결과에서 초기 seed anchor 선택 |
+| `detect_lua_scope` | 문자열 신호 BFS로 Lua VM 함수 스코프 자동 탐지 |
+| `bulk_query_retrieval` | feature → retrieval top-k 생성 (`--scope-json`으로 Lua 함수만 검색 가능) |
+| `targeted_retrieval` | 확정 앵커 이웃 기반 구조적 검색 (embedding 불필요) |
+| `select_seed_anchors` | retrieval + targeted 결과에서 seed anchor 선택 (dedup-first + scope gate) |
 | `build_runtime_suite` | retrieval + seed + reference DB를 propagation 입력으로 조립 |
 | `run_downstream` | build_suite → propagation → deferred_analysis → final_report 재실행 |
 
@@ -103,27 +158,42 @@ python scripts/20_run_mcp_server.py
 |----|------|
 | `read_final_report` | 최종 보고서 summary + preview |
 | `read_mapping_record` | case_id 기준 단일 매핑 레코드 조회 |
-| `read_propagation_summary` | propagation 중간 결과 요약 (deferred/conflict 전체 목록) |
+| `read_propagation_summary` | propagation 중간 결과 요약 |
 | `list_deferred_cases` | deferred + conflict 케이스 triage 목록 |
+| `show_candidate_context` | 단일 케이스 전체 컨텍스트 번들 (매핑+triage+feature 요약) |
+| `get_mapping_distribution` | 다:1 노이즈 명 탐지용 히스토그램 |
+| `export_trusted_mappings` | 신뢰도 높은 1:1 매핑 추출 (IDA 리네임용) |
 
-#### anchor 관리
+#### anchor / 노이즈 관리
 
 | 툴 | 설명 |
 |----|------|
-| `register_force_anchor` | IDA 분석으로 확정된 단일 매핑 등록 후 propagation 재실행 |
-| `batch_register_force_anchors` | 여러 확정 매핑을 한 번에 등록 (downstream 1회만 실행) |
-| `run_downstream` | seed_anchors.json을 건드리지 않고 build_suite → propagation → report만 재실행 |
+| `register_force_anchor` | 단일 확정 매핑 등록 + propagation 재실행 |
+| `batch_register_force_anchors` | 여러 확정 매핑 일괄 등록 (downstream 1회) |
+| `remove_force_anchor` | force anchor 취소 |
+| `update_noise_blacklist` | suite.json noise_blacklist 추가/제거 |
+| `patch_features_with_confirmed` | feature JSON callee/caller에 실제 이름 반영 |
 
-### 전형적인 워크플로우
+### 권장 분석 루프 (혼합 바이너리 기준)
 
 ```
-1. extract_query_features  → Ghidra로 feature 추출
-2. 12/13/14/04/05/15 스크립트 또는 기존 결과 파일 준비
-3. read_final_report       → 결과 확인 (accepted/deferred/conflict 수)
-4. list_deferred_cases     → deferred/conflict 케이스 목록 확인
-5. (IDA로 deferred 케이스 decompile 분석)
-6. batch_register_force_anchors → 확정 매핑 일괄 등록 + propagation 재실행
-7. read_final_report       → 최종 결과 재확인
+Round 1 (초기):
+  1. extract_query_features   → feature 추출
+  2. detect_lua_scope         → Lua 스코프 탐지 (~800개)
+  3. bulk_query_retrieval     → scope 필터 적용 retrieval (800개만 encoding)
+  4. select_seed_anchors      → dedup-first + scope gate
+  5. run_downstream           → propagation Round 1
+  6. get_mapping_distribution → 노이즈 명 탐지
+  7. update_noise_blacklist + run_downstream → 노이즈 제거
+
+Round N (반복):
+  8. export_trusted_mappings  → 신뢰 매핑 추출
+  9. (IDA에서 확인 후 rename)
+ 10. patch_features_with_confirmed → callee/caller에 실제 이름 반영
+ 11. targeted_retrieval       → 구조 기반 추가 탐색 (embedding 불필요)
+ 12. select_seed_anchors      → targeted_json 포함해서 재선택
+ 13. run_downstream           → propagation Round N
+ 14. accepted 증가 없으면 수렴 → 종료
 ```
 
 ## Retrieval Index 정책

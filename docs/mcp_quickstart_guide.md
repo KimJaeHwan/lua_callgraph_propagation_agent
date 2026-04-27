@@ -11,6 +11,32 @@
 
 이 문서는 그 흐름을 빠르게 익히기 위한 입문 가이드다.
 
+## 먼저 확인할 것: sentence_transformers 설치 여부
+
+`bulk_query_retrieval` (embedding 검색) 은 `sentence-transformers` 라이브러리가 **반드시** 필요하다.
+
+```bash
+# 설치 확인
+pip show sentence-transformers
+
+# 없으면 설치 (2~3 GB, 5~15분)
+pip install sentence-transformers
+```
+
+### 설치 안 된 상태에서 쓰면 어떻게 되나
+
+`12_run_bulk_query_retrieval.py`가 즉시 crash 한다.  
+나머지 스크립트(propagation, targeted_retrieval, 결과 조회 등)는 모두 정상 동작한다.
+
+`17_patch_and_rerun.py` 사용 시 임시 우회:
+```powershell
+python scripts/17_patch_and_rerun.py ... --skip-retrieval
+```
+
+단, `--skip-retrieval`은 **기존 retrieval_result.json을 재사용**하므로  
+확정된 199개 함수 이름이 반영된 patched feature가 검색에 활용되지 않는다.  
+→ **설치 후 최소 1회 fresh retrieval 필수**
+
 ## 한 줄 이해
 
 이 MCP는 크게 4가지를 한다.
@@ -55,35 +81,54 @@ IDA/Ghidra decompile을 보고 사람이 확정한 함수 매핑을 `force_ancho
 
 ## 어떤 tool부터 써야 하나
 
-### A. 새 바이너리 처음 분석할 때
+### A. 새 바이너리 처음 분석할 때 (게임 엔진 같은 혼합 바이너리 권장 순서)
 
-binary target이면 보통 이 순서다.
+```
+1. extract_query_features     → Ghidra feature 추출
+2. detect_lua_scope           → Lua VM 함수 스코프 탐지 (~800개)
+                                  출력: lua_scope.json
+3. bulk_query_retrieval       → --scope-json 적용 (16k → ~800개만 encoding)
+                                  출력: retrieval_result.json
+4. select_seed_anchors        → --scope-json + --dedup-max-per-ref 1
+                                  출력: seed_anchors.json
+5. build_runtime_suite        → propagation 입력 조립
+6. run_downstream             → propagation Round 1
+7. get_mapping_distribution   → 노이즈 명 탐지 (5개 이상이면 blacklist 후보)
+8. update_noise_blacklist     → 노이즈 제거
+   + run_downstream
+9. export_trusted_mappings    → 1:1 신뢰 매핑 추출
+10. (IDA에서 확인 후 rename)
+11. batch_register_force_anchors → 확정 매핑 등록
+```
 
-1. `extract_query_features`
-2. `bulk_query_retrieval`
-3. `select_seed_anchors`
-4. `build_runtime_suite`
-5. `read_final_report`
-6. `list_deferred_cases`
-7. IDA/Ghidra에서 몇 개 확인
-8. `batch_register_force_anchors`
-9. `read_final_report`
+### B. Round N 반복 (targeted retrieval 포함)
 
-### B. 이미 feature가 있는 상태에서 분석할 때
+앵커가 쌓인 후 구조 기반 검색으로 추가 탐색:
 
-보통 이 순서다.
+```
+1. patch_features_with_confirmed  → callee/caller에 실제 이름 반영
+2. targeted_retrieval             → 확정 앵커 이웃 기반 검색 (embedding 불필요)
+                                     출력: targeted_retrieval.json
+3. select_seed_anchors            → --targeted-json 포함
+4. run_downstream                 → propagation Round N
+5. accepted 증가 없으면 수렴 → 종료
+```
 
-1. retrieval/seed/propagation 결과 준비
-2. `read_final_report`
-3. `list_deferred_cases`
-4. `read_mapping_record`
-5. analyst 확인
-6. `register_force_anchor` 또는 `batch_register_force_anchors`
+### C. 이미 feature가 있는 상태에서 분석할 때
 
-### C. seed를 직접 수정한 뒤 재실행만 할 때
+```
+1. read_final_report
+2. list_deferred_cases
+3. show_candidate_context (개별 케이스 상세)
+4. IDA 확인 후 batch_register_force_anchors
+```
 
-1. `run_downstream`
-2. `read_final_report`
+### D. seed를 직접 수정한 뒤 재실행만 할 때
+
+```
+1. run_downstream
+2. read_final_report
+```
 
 ## tool을 고를 때 빠른 판단표
 
