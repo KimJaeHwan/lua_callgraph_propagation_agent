@@ -630,6 +630,13 @@ def parse_args() -> argparse.Namespace:
                    help="Reference callgraph SQLite for targeted retrieval (12c).")
     p.add_argument("--lua-version",   type=str, default="Lua_536",
                    help="Lua version string used to filter reference DB edges (default Lua_536).")
+    p.add_argument("--scope-json", type=Path, default=None,
+                   help="lua_scope.json from 12b_detect_lua_scope.py. "
+                        "When provided, embedding retrieval runs only on Lua-scope functions "
+                        "(~800 instead of 16k). Auto-detected from result-dir if not set.")
+    p.add_argument("--scope-min-confidence", default="low",
+                   choices=["high", "medium", "low"],
+                   help="Minimum scope confidence for retrieval scope filter (default: low).")
     p.add_argument("--skip-retrieval", action="store_true",
                    help="Skip embedding retrieval (uses existing retrieval_result.json).")
     p.add_argument("--skip-targeted", action="store_true",
@@ -659,12 +666,31 @@ def main() -> None:
 
     # ── 3. re-retrieval with patched features ────────────────────────────────
     if not args.skip_retrieval:
-        run("12_retrieval_patched", [
+        # Auto-detect scope JSON from result-dir if not specified
+        scope_json = args.scope_json
+        if scope_json is None:
+            candidate = result_dir / "lua_scope.json"
+            if candidate.exists():
+                scope_json = candidate
+                print(f"\n[INFO] auto-detected scope JSON: {scope_json}")
+
+        retrieval_cmd = [
             PYTHON, "scripts/12_run_bulk_query_retrieval.py",
             "--query-json",  str(patched_query),
             "--index",       str(args.index),
             "--output-json", str(retrieval_json),
-        ])
+        ]
+        if scope_json and scope_json.exists():
+            retrieval_cmd += [
+                "--scope-json",           str(scope_json),
+                "--scope-min-confidence", args.scope_min_confidence,
+            ]
+            print(f"[INFO] scope-filtered retrieval enabled "
+                  f"(min_confidence={args.scope_min_confidence})")
+        else:
+            print("[WARN] no scope JSON — running full retrieval on all functions")
+
+        run("12_retrieval_patched", retrieval_cmd)
     else:
         print("\n[SKIP] retrieval step (--skip-retrieval)")
 

@@ -134,7 +134,12 @@ def extract_query_features(
         "'data/inputs/retrieval_indexes/Lua_547/x86_64/runtime'. "
         "scoring_mode: 'bonus_v2' is recommended. "
         "output_json: where to write retrieval_result.json. "
-        "Use this for retrieval-only experiments or benchmarking without running full propagation."
+        "scope_json: HIGHLY RECOMMENDED for mixed binaries (game + Lua VM). "
+        "Pass lua_scope.json from detect_lua_scope() to restrict embedding encoding "
+        "to only Lua-scope functions (~800 vs 16000). Effect: 20x faster encoding, "
+        "zero game-code contamination in retrieval_result.json. "
+        "scope_min_confidence: 'low' includes BFS-reached functions (default); "
+        "'medium' limits to within 2 hops; 'high' = string-signal seeds only."
     )
 )
 def bulk_query_retrieval(
@@ -145,25 +150,25 @@ def bulk_query_retrieval(
     candidate_pool: int = 200,
     topk: int = 50,
     scoring_mode: str = "bonus_v2",
+    scope_json: str | None = None,
+    scope_min_confidence: str = "low",
 ) -> dict[str, Any]:
     command = [
         sys.executable,
         "scripts/12_run_bulk_query_retrieval.py",
-        "--index",
-        str(_resolve_path(index)),
-        "--output-json",
-        str(_resolve_path(output_json)),
-        "--candidate-pool",
-        str(candidate_pool),
-        "--topk",
-        str(topk),
-        "--scoring-mode",
-        scoring_mode,
+        "--index",          str(_resolve_path(index)),
+        "--output-json",    str(_resolve_path(output_json)),
+        "--candidate-pool", str(candidate_pool),
+        "--topk",           str(topk),
+        "--scoring-mode",   scoring_mode,
+        "--scope-min-confidence", scope_min_confidence,
     ]
     if extract_manifest:
         command.extend(["--extract-manifest", str(_resolve_path(extract_manifest))])
     if query_json:
         command.extend(["--query-json", str(_resolve_path(query_json))])
+    if scope_json:
+        command.extend(["--scope-json", str(_resolve_path(scope_json))])
     return _run_command(command)
 
 
