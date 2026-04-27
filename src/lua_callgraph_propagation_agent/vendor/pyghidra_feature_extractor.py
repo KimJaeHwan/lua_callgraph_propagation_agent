@@ -137,6 +137,9 @@ def extract_features(
     addr_factory = currentProgram.getAddressFactory()
     monitor = ConsoleTaskMonitor()
 
+    # 이미지 베이스를 빼서 파일 상대 오프셋으로 정규화
+    image_base = currentProgram.getImageBase().getOffset()
+
     iface = DecompInterface()
     iface.openProgram(currentProgram)
 
@@ -244,7 +247,7 @@ def extract_features(
 
         features = {
             "function_name": func.getName(),
-            "entry_point": str(func.getEntryPoint()),
+            "entry_point": format(func.getEntryPoint().getOffset() - image_base, 'x'),
             "basic_block_count": get_bb(func),
             "pcode_opcode_histogram": hist,
             "pcode_opcode_ratio": ratio,

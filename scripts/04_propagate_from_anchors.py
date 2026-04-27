@@ -497,9 +497,10 @@ def _process_one_case(
     classification_policy: dict,
     output_top_candidates: int,
     propagation_round: int,
+    lua_version_override: str | None = None,
 ) -> dict:
     query_name = query_row["function_name"]
-    lua_version = query_row.get("lua_version", "Lua_547")
+    lua_version = lua_version_override or query_row.get("lua_version", "Lua_547")
     architecture = normalize_architecture(query_row.get("architecture", "x86_64"))
     expected = case_cfg.get("expected_function", retrieval_case.get("expected_function"))
 
@@ -522,7 +523,13 @@ def _process_one_case(
     callee_anchors = [item["reference_function_name"] for item in callee_anchor_items]
     caller_anchors = [item["reference_function_name"] for item in caller_anchor_items]
 
+    noise_blacklist: set[str] = set(classification_policy.get("noise_blacklist", []))
+
     candidates = retrieval_candidates(retrieval_case, candidate_source)
+    # Remove noise-blacklisted names from retrieval candidates entirely
+    if noise_blacklist:
+        candidates = [c for c in candidates
+                      if c["candidate_function_name"] not in noise_blacklist]
     retrieval_names = {c["candidate_function_name"] for c in candidates}
     expanded = ref_db.expansion_candidates(
         callee_anchors=callee_anchors,
@@ -532,7 +539,7 @@ def _process_one_case(
         architecture=architecture,
         strip_mode=strip_mode,
         primary_opt=primary_opt,
-        exclude_names=retrieval_names,
+        exclude_names=retrieval_names | noise_blacklist,   # block noise from expansion too
         limit=expansion_limit,
     )
     for offset, item in enumerate(expanded, start=1):
@@ -665,6 +672,7 @@ def run_iterative_propagation(
     max_rounds: int,
     min_accepted_per_round: int,
     margin_tightening: float,
+    lua_version_override: str | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     BFS-style iterative propagation.
@@ -714,6 +722,7 @@ def run_iterative_propagation(
                 classification_policy=policy,
                 output_top_candidates=output_top_candidates,
                 propagation_round=round_num,
+                lua_version_override=lua_version_override,
             )
             round_results.append(result)
             last_round_results[case_id] = result
@@ -802,6 +811,7 @@ def main() -> None:
     candidate_source = suite.get("candidate_source", "unique_topk_preview")
     primary_opt = suite.get("scoring", {}).get("primary_opt", "O0")
     strip_mode = suite.get("scoring", {}).get("strip_mode", "nostrip")
+    lua_version_override = suite.get("scoring", {}).get("lua_version_override", None)
     expansion_prior = float(suite.get("candidate_expansion", {}).get("default_prior", 0.65))
     expansion_limit = int(suite.get("candidate_expansion", {}).get("max_candidates_per_case", 80))
     exclude_prefixes = suite.get("anchor_policy", {}).get("exclude_prefixes", [])
@@ -857,6 +867,7 @@ def main() -> None:
                 max_rounds=args.max_rounds,
                 min_accepted_per_round=args.min_accepted_per_round,
                 margin_tightening=args.margin_tightening,
+                lua_version_override=lua_version_override,
             )
         else:
             results = []
@@ -879,6 +890,7 @@ def main() -> None:
                     classification_policy=classification_policy,
                     output_top_candidates=output_top_candidates,
                     propagation_round=0,
+                    lua_version_override=lua_version_override,
                 )
                 results.append(result)
 

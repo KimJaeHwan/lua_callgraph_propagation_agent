@@ -826,6 +826,272 @@ def read_propagation_summary(config_path: str) -> dict[str, Any]:
     }
 
 
+@mcp.tool(
+    description=(
+        "Analyse the propagation result and return a histogram of how many query functions "
+        "each reference name is mapped to. "
+        "High-count reference names (>= suspicious_threshold) are strong noise candidates: "
+        "they likely match a common code pattern rather than a unique function. "
+        "Use this after run_downstream or batch_register_force_anchors to decide which names "
+        "to add to the noise blacklist before the next propagation round. "
+        "Returns: count_distribution (bucket → count), suspicious_names (list of "
+        "{reference_name, query_count, example_queries}), total_accepted, total_unique_ref_names."
+    )
+)
+def get_mapping_distribution(
+    config_path: str,
+    suspicious_threshold: int = 5,
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+
+    propagation_path = _resolve_path(paths["propagation_output_json"])
+    if not propagation_path.exists():
+        return {"ok": False, "error": f"propagation_output_json not found: {propagation_path}"}
+
+    data = _load_json(propagation_path)
+    results = data.get("results", [])
+    accepted = [r for r in results if r.get("status") == "accepted"]
+
+    from collections import defaultdict, Counter
+    name_to_queries: dict[str, list[str]] = defaultdict(list)
+    for r in accepted:
+        ref_name = r.get("predicted_function_name", "")
+        query = r.get("query_func", "")
+        if ref_name and not ref_name.startswith(("FUN_", "sub_")):
+            name_to_queries[ref_name].append(query)
+
+    count_dist = Counter(len(v) for v in name_to_queries.values())
+    suspicious = [
+        {
+            "reference_name": name,
+            "query_count": len(queries),
+            "example_queries": queries[:5],
+        }
+        for name, queries in sorted(name_to_queries.items(), key=lambda x: -len(x[1]))
+        if len(queries) >= suspicious_threshold
+    ]
+
+    return {
+        "ok": True,
+        "propagation_json": str(propagation_path),
+        "summary": data.get("summary", {}),
+        "count_distribution": {str(k): v for k, v in sorted(count_dist.items())},
+        "total_accepted": len(accepted),
+        "total_unique_ref_names": len(name_to_queries),
+        "high_confidence_1to1_count": count_dist.get(1, 0),
+        "suspicious_names": suspicious,
+        "suspicious_threshold": suspicious_threshold,
+    }
+
+
+@mcp.tool(
+    description=(
+        "Export high-confidence accepted mappings filtered by mapping_count. "
+        "mapping_count=1 means exactly ONE query function matched this reference name (1:1, highest confidence). "
+        "max_count=1 returns only 1:1 mappings; max_count=2 includes 2:1 caution entries too. "
+        "exclude_prefixes filters out unwanted reference names (default: FUN_,sub_). "
+        "Returns sorted list of {query_func, entry_point, predicted_name, mapping_count, final_score, propagation_round}. "
+        "Use this to decide which functions to rename in IDA and register as force anchors for the next round. "
+        "Optionally saves results to output_json."
+    )
+)
+def export_trusted_mappings(
+    config_path: str,
+    max_count: int = 1,
+    exclude_prefixes: str = "FUN_,sub_",
+    output_json: str | None = None,
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+
+    propagation_path = _resolve_path(paths["propagation_output_json"])
+    if not propagation_path.exists():
+        return {"ok": False, "error": f"propagation_output_json not found: {propagation_path}"}
+
+    data = _load_json(propagation_path)
+    results = data.get("results", [])
+
+    # build entry_point lookup from query feature JSON
+    addr_map: dict[str, str] = {}
+    query_file_path = _resolve_path(paths.get("query_json", ""))
+    if query_file_path.exists():
+        try:
+            funcs = _load_json(query_file_path)
+            if isinstance(funcs, list):
+                addr_map = {f["function_name"]: f.get("entry_point", "") for f in funcs}
+        except Exception:
+            pass
+
+    from collections import defaultdict
+    excl = tuple(x for x in exclude_prefixes.split(",") if x)
+    name_to_rows: dict[str, list[dict]] = defaultdict(list)
+    for r in results:
+        if r.get("status") == "accepted":
+            name_to_rows[r["predicted_function_name"]].append(r)
+
+    trusted: list[dict] = []
+    for ref_name, rows in name_to_rows.items():
+        if len(rows) > max_count:
+            continue
+        if ref_name.startswith(excl):
+            continue
+        for r in rows:
+            qf = r["query_func"]
+            top = (r.get("top_candidates") or [{}])[0]
+            trusted.append({
+                "query_func": qf,
+                "entry_point": addr_map.get(qf, ""),
+                "predicted_name": ref_name,
+                "mapping_count": len(rows),
+                "final_score": top.get("final_score", 0),
+                "propagation_round": r.get("propagation_round", -1),
+            })
+
+    trusted.sort(key=lambda x: (-int(x["mapping_count"] == 1), -x["final_score"]))
+
+    result = {
+        "ok": True,
+        "propagation_json": str(propagation_path),
+        "max_count": max_count,
+        "total_trusted": len(trusted),
+        "unique_1to1": sum(1 for t in trusted if t["mapping_count"] == 1),
+        "mappings": trusted,
+    }
+
+    if output_json:
+        out_path = _resolve_path(output_json)
+        _save_json(out_path, trusted)
+        result["saved_to"] = str(out_path)
+
+    return result
+
+
+@mcp.tool(
+    description=(
+        "Add or remove reference function names from the noise_blacklist in a suite JSON file. "
+        "The noise_blacklist prevents noisy reference names from being proposed as candidates "
+        "during propagation (applied at both retrieval-candidate filtering AND callgraph expansion). "
+        "add: list of names to add to the blacklist. "
+        "remove: list of names to remove from the blacklist. "
+        "Both operations are idempotent — adding an already-listed name or removing a missing name "
+        "is a no-op. "
+        "Call run_downstream after this to re-propagate with the updated policy."
+    )
+)
+def update_noise_blacklist(
+    suite_json: str,
+    add: list[str] | None = None,
+    remove: list[str] | None = None,
+) -> dict[str, Any]:
+    suite_path = _resolve_path(suite_json)
+    if not suite_path.exists():
+        return {"ok": False, "error": f"suite_json not found: {suite_path}"}
+
+    data = _load_json(suite_path)
+    policy = data.setdefault("classification_policy", {})
+    current: list[str] = policy.get("noise_blacklist", [])
+    current_set = set(current)
+
+    actually_added: list[str] = []
+    actually_removed: list[str] = []
+
+    for name in (add or []):
+        if name and name not in current_set:
+            current_set.add(name)
+            actually_added.append(name)
+
+    for name in (remove or []):
+        if name and name in current_set:
+            current_set.discard(name)
+            actually_removed.append(name)
+
+    policy["noise_blacklist"] = sorted(current_set)
+    _save_json(suite_path, data)
+
+    return {
+        "ok": True,
+        "suite_json": str(suite_path),
+        "blacklist_size": len(policy["noise_blacklist"]),
+        "added": actually_added,
+        "removed": actually_removed,
+        "current_blacklist": policy["noise_blacklist"],
+    }
+
+
+@mcp.tool(
+    description=(
+        "Patch a query feature JSON so that known real Lua function names appear in callee/caller "
+        "neighbour lists, giving hybrid retrieval a stronger callgraph signal on the next run. "
+        "confirmed_map: dict mapping hex entry_point strings to confirmed real names, "
+        "e.g. {'4a7141': 'luaopen_base', '48dc9e': 'lua_setfield'}. "
+        "For each function in the feature JSON whose entry_point appears in confirmed_map, "
+        "every occurrence of that function's Ghidra name (FUN_xxx / sub_xxx) in ALL other "
+        "functions' callee/caller lists is replaced with the real name. "
+        "Saves the patched file as <stem>_patched.json next to the original. "
+        "Returns the path to the patched file and how many callee/caller references were replaced. "
+        "Run bulk_query_retrieval again with the patched file to improve retrieval quality."
+    )
+)
+def patch_features_with_confirmed(
+    query_json: str,
+    confirmed_map: dict[str, str],
+) -> dict[str, Any]:
+    query_path = _resolve_path(query_json)
+    if not query_path.exists():
+        return {"ok": False, "error": f"query_json not found: {query_path}"}
+
+    funcs: list[dict] = _load_json(query_path)
+    if not isinstance(funcs, list):
+        funcs = funcs.get("functions", [])
+
+    # build: ghidra_function_name -> real_name  (keyed by entry_point hex)
+    ghidra_to_real: dict[str, str] = {}
+    for f in funcs:
+        ep_raw = f.get("entry_point", "").lower().lstrip("0") or "0"
+        for ep_key, real_name in confirmed_map.items():
+            ep_norm = ep_key.lower().lstrip("0") or "0"
+            if ep_raw == ep_norm:
+                ghidra_to_real[f["function_name"]] = real_name
+                break
+
+    replaced_total = 0
+    patched: list[dict] = []
+    for fc in funcs:
+        import copy
+        fc = copy.deepcopy(fc)
+        new_callees = []
+        for c in fc.get("callees", []):
+            if c in ghidra_to_real:
+                new_callees.append(ghidra_to_real[c])
+                replaced_total += 1
+            else:
+                new_callees.append(c)
+        fc["callees"] = new_callees
+
+        new_callers = []
+        for c in fc.get("callers", []):
+            if c in ghidra_to_real:
+                new_callers.append(ghidra_to_real[c])
+                replaced_total += 1
+            else:
+                new_callers.append(c)
+        fc["callers"] = new_callers
+        patched.append(fc)
+
+    out_path = query_path.parent / (query_path.stem + "_patched.json")
+    _save_json(out_path, patched)
+
+    return {
+        "ok": True,
+        "original_query_json": str(query_path),
+        "patched_query_json": str(out_path),
+        "confirmed_names_count": len(ghidra_to_real),
+        "callee_caller_references_replaced": replaced_total,
+        "note": "Run bulk_query_retrieval with patched_query_json to improve retrieval candidates.",
+    }
+
+
 def main() -> None:
     mcp.run(transport="stdio", show_banner=False)
 
