@@ -207,13 +207,16 @@ Round N (반복):
 
 ## 관련 문서
 
-- [docs/mcp_runtime.md](docs/mcp_runtime.md) — MCP 툴 상세 설명
-- [docs/mcp_quickstart_guide.md](docs/mcp_quickstart_guide.md) — 처음 쓰는 사람용 MCP 입문 가이드
-- [docs/mcp_tool_reference.md](docs/mcp_tool_reference.md) — tool별 기능/입력/주의점 레퍼런스
-- [docs/input_schema.md](docs/input_schema.md) — feature JSON 스키마
-- [docs/config_field_reference.md](docs/config_field_reference.md) — config 필드 레퍼런스
-- [docs/extraction_runtime_environment.md](docs/extraction_runtime_environment.md) — Ghidra 환경 설정
-- [docs/macos_mps_setup.md](docs/macos_mps_setup.md) — Apple Silicon MPS 전용 환경 구성
-- [docs/retrieval_performance_plan.md](docs/retrieval_performance_plan.md) — retrieval 성능 개선 측정/정리
-- [docs/callgraph_propagation_agent_design.md](docs/callgraph_propagation_agent_design.md) — 설계 문서
-- [docs/runtime_validation_and_configs.md](docs/runtime_validation_and_configs.md) — 검증 이력
+| 문서 | 설명 |
+|------|------|
+| [docs/mcp_quickstart_guide.md](docs/mcp_quickstart_guide.md) | 처음 쓰는 사람용 입문 가이드. sentence_transformers 설치 확인부터 시작 |
+| [docs/mcp_tool_reference.md](docs/mcp_tool_reference.md) | 19개 툴 전체 레퍼런스 (v0.6.0) |
+| [docs/mcp_runtime.md](docs/mcp_runtime.md) | MCP 서버 구조, 워크플로우, 설계 원칙 |
+| [docs/mcp_feature_review.md](docs/mcp_feature_review.md) | 구현 현황, 실전 이슈 해결 이력, 향후 방향 |
+| [docs/langgraph_agent_plan.md](docs/langgraph_agent_plan.md) | Local LLM 자율 실행용 LangGraph 에이전트 설계 |
+| [docs/input_schema.md](docs/input_schema.md) | feature JSON 스키마 |
+| [docs/config_field_reference.md](docs/config_field_reference.md) | config 필드 레퍼런스 |
+| [docs/extraction_runtime_environment.md](docs/extraction_runtime_environment.md) | Ghidra / pyghidra 환경 설정 |
+| [docs/macos_mps_setup.md](docs/macos_mps_setup.md) | Apple Silicon MPS 전용 환경 구성 |
+| [docs/callgraph_propagation_agent_design.md](docs/callgraph_propagation_agent_design.md) | 초기 설계 문서 (구현 과정에서 일부 발전됨) |
+| [docs/runtime_validation_and_configs.md](docs/runtime_validation_and_configs.md) | 검증 이력 |

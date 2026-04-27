@@ -231,5 +231,6 @@ score가 높아 보여도 오탐일 수 있다.
 
 ## 같이 보면 좋은 문서
 
-- [mcp_runtime.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_runtime.md)
-- [mcp_feature_review.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/mcp_feature_review.md)
+- [mcp_tool_reference.md](mcp_tool_reference.md)
+- [mcp_runtime.md](mcp_runtime.md)
+- [mcp_feature_review.md](mcp_feature_review.md)
