@@ -5,7 +5,7 @@ analyst 또는 상위 LLM agent가 파이프라인을 제어하고 deferred case
 
 처음 쓰는 사람이라면 이 문서 전에 아래 두 문서를 먼저 보는 편이 더 쉽다.
 
-- [mcp_quickstart_guide.md](mcp_quickstart_guide.md)
+- [../guides/mcp_quickstart_guide.md](../guides/mcp_quickstart_guide.md)
 - [mcp_tool_reference.md](mcp_tool_reference.md)
 
 ## 실행

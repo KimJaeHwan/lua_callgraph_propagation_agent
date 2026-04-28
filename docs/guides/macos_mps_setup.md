@@ -33,7 +33,7 @@ Apple Silicon + MPS는 상대적으로 Python 3.11 환경이 더 안정적이어
 프로젝트 루트 기준:
 
 - venv: `../lua_llm_mps`
-- requirements: [`requirements-macos-mps.txt`](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/requirements-macos-mps.txt)
+- requirements: [../../requirements-macos-mps.txt](../../requirements-macos-mps.txt)
 
 ## 빠른 시작
 
@@ -113,6 +113,6 @@ PY
 
 ## 관련 파일
 
-- [`scripts/00_setup_macos_mps_environment.py`](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/00_setup_macos_mps_environment.py)
-- [`requirements-macos-mps.txt`](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/requirements-macos-mps.txt)
-- [`docs/retrieval_performance_plan.md`](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/retrieval_performance_plan.md)
+- [../../scripts/00_setup_macos_mps_environment.py](../../scripts/00_setup_macos_mps_environment.py)
+- [../../requirements-macos-mps.txt](../../requirements-macos-mps.txt)
+- [../architecture/retrieval_performance_plan.md](../architecture/retrieval_performance_plan.md)

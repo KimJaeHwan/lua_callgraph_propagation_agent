@@ -5,9 +5,9 @@
 대표 예시는 아래 두 파일을 기준으로 본다.
 
 - pre-extracted 기준:
-  [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
+  [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
 - binary 기준:
-  [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
+  [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json)
 
 ## 1. 최상위 구조
 
@@ -278,13 +278,13 @@
 }
 ```
 
-나머지 경로는 [10_run_name_mapping_pipeline.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/10_run_name_mapping_pipeline.py)에서 기본값으로 자동 채워준다.
+나머지 경로는 [10_run_name_mapping_pipeline.py](../../scripts/10_run_name_mapping_pipeline.py)에서 기본값으로 자동 채워준다.
 
 ## 6. 추천 읽는 순서
 
 처음 보는 사람 기준으로는 아래 순서가 가장 이해가 빠르다.
 
-1. [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
-2. [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
-3. [runtime_validation_and_configs.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/runtime_validation_and_configs.md)
-4. [release_assets.md](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/docs/release_assets.md)
+1. [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
+2. [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json)
+3. [runtime_validation_and_configs.md](runtime_validation_and_configs.md)
+4. [../guides/release_assets.md](../guides/release_assets.md)

@@ -336,6 +336,6 @@ confirmed_map: dict[str, str]  # {entry_point_hex: real_name}
 
 ## 같이 보면 좋은 문서
 
-- [mcp_quickstart_guide.md](mcp_quickstart_guide.md)
+- [../guides/mcp_quickstart_guide.md](../guides/mcp_quickstart_guide.md)
 - [mcp_runtime.md](mcp_runtime.md)
-- [langgraph_agent_plan.md](langgraph_agent_plan.md)
+- [../architecture/langgraph_agent_plan.md](../architecture/langgraph_agent_plan.md)

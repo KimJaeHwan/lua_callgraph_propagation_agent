@@ -4,7 +4,7 @@
 
 현재 목표는 구현 전 단계에서 데이터 계약을 명확히 하는 것이다. 이후 `graph_loader.py`, `candidate_store.py`, `propagation_engine.py`, `llm_analyst.py`는 이 문서를 기준으로 구현한다.
 
-주의: 이 문서의 JSON graph는 작은 fixture와 query 입력 교환 포맷을 위한 것이다. 대량 vanilla reference call graph는 SQLite edge-list로 저장한다. 저장 설계는 [callgraph_store_design.md](callgraph_store_design.md)를 따른다.
+주의: 이 문서의 JSON graph는 작은 fixture와 query 입력 교환 포맷을 위한 것이다. 대량 vanilla reference call graph는 SQLite edge-list로 저장한다. 저장 설계는 [../architecture/callgraph_store_design.md](../architecture/callgraph_store_design.md)를 따른다.
 
 ## 1. 공통 원칙
 

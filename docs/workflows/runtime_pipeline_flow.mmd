@@ -1,0 +1,36 @@
+flowchart TD
+    A[입력 바이너리<br/>stripped .so / ELF] --> B[11_extract_query_features.py<br/>Ghidra/pyghidra feature 추출]
+    B --> C[extract_manifest.json<br/>query feature JSON]
+
+    C --> D[12b_detect_lua_scope.py<br/>Lua scope 탐지]
+    D --> E[lua_scope.json<br/>likely Lua 함수 집합]
+
+    C --> F[12_run_bulk_query_retrieval.py<br/>hybrid retrieval]
+    E --> F
+    F --> G[retrieval_result.json<br/>함수별 top-k 후보]
+
+    C --> H[13_select_seed_anchors.py<br/>seed anchor 선택]
+    G --> H
+    E --> H
+    H --> I[seed_anchors.json<br/>고신뢰 시작점]
+
+    G --> J[14_build_runtime_propagation_suite.py<br/>suite 조립]
+    I --> J
+    J --> K[runtime_propagation_suite.json]
+
+    K --> L[04_propagate_from_anchors.py<br/>iterative propagation]
+    L --> M[propagation_result.json<br/>accepted deferred conflict]
+
+    M --> N[05_build_deferred_analysis.py<br/>deferred triage]
+    N --> O[deferred_analysis.json]
+
+    M --> P[15_export_final_mapping_report.py<br/>최종 보고서 생성]
+    O --> P
+    P --> Q[final_mapping_report.json]
+
+    Q --> R{분석가 검증 필요?}
+    R -->|예| S[17_patch_and_rerun.py<br/>feature patch force anchor dedup]
+    S --> T[12c_targeted_retrieval.py<br/>anchor 주변 구조 검색]
+    T --> H
+    S --> H
+    R -->|아니오| U[종료]

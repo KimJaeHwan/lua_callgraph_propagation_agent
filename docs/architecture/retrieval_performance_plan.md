@@ -199,7 +199,7 @@ Mac baseline 세부:
 - 하지만 현재 이 맥 환경에서는 실제 usable 상태가 아님
 - 당분간 Mac에서는 `CPU + FAISS + symbolic 최적화`가 현실적인 주 경로
 
-자세한 설정은 [macos_mps_setup.md](docs/macos_mps_setup.md)를 참고한다.
+자세한 설정은 [../guides/macos_mps_setup.md](../guides/macos_mps_setup.md)를 참고한다.
 
 ## Windows 지원 관점
 

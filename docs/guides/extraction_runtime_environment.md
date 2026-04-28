@@ -58,7 +58,7 @@ Please set the GHIDRA_INSTALL_DIR environment variable
 
 대상 스크립트:
 
-- [11_extract_query_features.py](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/scripts/11_extract_query_features.py)
+- [11_extract_query_features.py](../../scripts/11_extract_query_features.py)
 
 runtime wrapper는 extractor subprocess를 실행하기 전에 다음 환경을 명시적으로 설정한다.
 
@@ -120,25 +120,25 @@ cd lua_callgraph_propagation_agent
 
 생성 파일:
 
-- [extract_manifest.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/query_features/smoke_fix_0000/extract_manifest.json)
-- [x86_64_O0_nostrip_lua_lua_547_0000_20260423_072238.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/query_features/smoke_fix_0000/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0000_20260423_072238.json)
+- `data/runtime/query_features/smoke_fix_0000/extract_manifest.json`
+- `data/runtime/query_features/smoke_fix_0000/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0000_20260423_072238.json`
 
 즉, extractor wrapper는 이제 `lua_callgraph_propagation_agent` 내부에서도 독립적으로 동작한다.
 
 ### 2. MCP -> pipeline_run -> 실제 binary
 
-실제 binary 실행은 현재 공개된 추천 config [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json) 또는 이에 준하는 로컬 smoke config로 수행한다.
+실제 binary 실행은 현재 공개된 추천 config [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json) 또는 이에 준하는 로컬 smoke config로 수행한다.
 
 대상 binary:
 
-- [lua_lua_547_0000](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_extract_feature_ghidra/processed_binaries/Lua_547/x86_64/O0/nostrip/lua_lua_547_0000)
+- `../lua_extract_feature_ghidra/processed_binaries/Lua_547/x86_64/O0/nostrip/lua_lua_547_0000`
 
 환경 보정 이후에는 `MCP -> pipeline_run` 경로에서도 extraction 결과가 실제로 생성되는 것을 확인했다.
 
 생성 파일:
 
-- [extract_manifest.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/query_features/lua547_x86_processed_binary_0000/extract_manifest.json)
-- [x86_64_O0_nostrip_lua_lua_547_0000_20260423_072802.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/query_features/lua547_x86_processed_binary_0000/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0000_20260423_072802.json)
+- `data/runtime/query_features/lua547_x86_processed_binary_0000/extract_manifest.json`
+- `data/runtime/query_features/lua547_x86_processed_binary_0000/Lua_547/x86_64/O0/nostrip/x86_64_O0_nostrip_lua_lua_547_0000_20260423_072802.json`
 
 즉, 이전의 “MCP pipeline에서는 extraction이 안 된다” 상태는 해소됐다.
 

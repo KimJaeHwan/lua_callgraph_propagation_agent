@@ -231,6 +231,6 @@ score가 높아 보여도 오탐일 수 있다.
 
 ## 같이 보면 좋은 문서
 
-- [mcp_tool_reference.md](mcp_tool_reference.md)
-- [mcp_runtime.md](mcp_runtime.md)
-- [mcp_feature_review.md](mcp_feature_review.md)
+- [../mcp/mcp_tool_reference.md](../mcp/mcp_tool_reference.md)
+- [../mcp/mcp_runtime.md](../mcp/mcp_runtime.md)
+- [../mcp/mcp_feature_review.md](../mcp/mcp_feature_review.md)

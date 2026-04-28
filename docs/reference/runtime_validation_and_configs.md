@@ -26,11 +26,11 @@
 생성한 입력:
 
 - query subset:
-  [external_strip_0000_eval_subset.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/inputs/query_features/external_strip_0000_eval_subset.json)
+  `data/inputs/query_features/external_strip_0000_eval_subset.json`
 - runtime config:
-  [runtime_external_strip_0000_eval_subset.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_external_strip_0000_eval_subset.json)
+  `data/configs/runtime_external_strip_0000_eval_subset.json`
 - expected mapping table:
-  [external_strip_0000_eval_subset_expected.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/results/external_strip_0000_eval_subset_expected.json)
+  `data/runtime/results/external_strip_0000_eval_subset_expected.json`
 
 검증 결과:
 
@@ -51,9 +51,9 @@
 
 대표 결과:
 
-- [final_mapping_report.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/results/external_strip_0000_eval_subset/final_mapping_report.json)
-- [propagation_result.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/results/external_strip_0000_eval_subset/propagation_result.json)
-- [deferred_analysis.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/runtime/results/external_strip_0000_eval_subset/deferred_analysis.json)
+- `data/runtime/results/external_strip_0000_eval_subset/final_mapping_report.json`
+- `data/runtime/results/external_strip_0000_eval_subset/propagation_result.json`
+- `data/runtime/results/external_strip_0000_eval_subset/deferred_analysis.json`
 
 ## 2. Config Folder Meaning
 
@@ -78,7 +78,7 @@
 예를 들어:
 
 - config:
-  [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
+  [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
 - output:
   `data/runtime/results/recommended_preextracted_run/`
 
@@ -90,9 +90,9 @@
 권장 최소 config:
 
 - binary 입력용:
-  [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
+  [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json)
 - pre-extracted 입력용:
-  [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
+  [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
 
 ## 3. Versioned Runtime Layout
 
@@ -127,9 +127,9 @@ data/inputs/retrieval_indexes/Lua_524/x86_64/runtime/
 
 현재 Git에 포함되는 공식 config는 두 개만 유지한다.
 
-- [runtime_recommended_preextracted.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_preextracted.json)
+- [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
   - 가장 빠르게 구조와 실행 흐름을 확인하는 기본 진입점
-- [runtime_recommended_binary.json](/Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper/lua_callgraph_propagation_agent/data/configs/runtime_recommended_binary.json)
+- [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json)
   - 실제 binary extraction을 포함하는 기본 진입점
 
 그 외 실험/평가/디버깅용 config는 로컬 재현용 자산으로 취급하고 Git에는 포함하지 않는다.

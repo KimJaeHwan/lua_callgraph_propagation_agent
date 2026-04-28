@@ -75,7 +75,12 @@ data/runtime/**
 !data/runtime/.gitkeep
 !data/runtime/input/
 !data/runtime/input/.gitkeep
-!data/runtime/input/*
+!data/runtime/query_features/
+!data/runtime/query_features/.gitkeep
+!data/runtime/results/
+!data/runtime/results/.gitkeep
+!data/runtime/extractor_workspace/
+!data/runtime/extractor_workspace/.gitkeep
 
 # Do not commit the copied full retrieval index or generated runtime outputs.
 data/inputs/retrieval_indexes/**
@@ -99,5 +104,3 @@ data/inputs/retrieval_indexes/**
 *.log
 *.tmp
 *.temp
-
-# Keep committed runtime assets
