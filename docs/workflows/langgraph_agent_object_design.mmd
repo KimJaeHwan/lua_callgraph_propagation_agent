@@ -1,0 +1,252 @@
+classDiagram
+    direction LR
+
+    class AgentState {
+        +str config_path
+        +RuntimePaths paths
+        +GraphConfig graph_config
+        +str phase
+        +int round_index
+        +int max_rounds
+        +int last_accepted
+        +int current_accepted
+        +int delta_accepted
+        +int convergence_count
+        +dict confirmed_map
+        +list pending_trusted
+        +list pending_deferred
+        +list verified_decisions
+        +list noise_blacklist
+        +dict last_report_summary
+        +dict last_distribution
+        +list tool_failures
+        +bool ida_available
+        +bool done
+        +str final_summary
+    }
+
+    class RuntimePaths {
+        +str query_json
+        +str extract_manifest
+        +str lua_scope_json
+        +str retrieval_json
+        +str seed_anchor_json
+        +str suite_json
+        +str propagation_json
+        +str deferred_json
+        +str final_report_json
+        +str patched_query_json
+        +str targeted_json
+        +str reference_db
+        +str retrieval_index
+    }
+
+    class GraphConfig {
+        +int max_rounds
+        +int convergence_patience
+        +int min_delta_accepted
+        +int suspicious_threshold
+        +int auto_blacklist_threshold
+        +float trusted_min_score
+        +float decompile_min_score
+        +int max_ida_cases_per_round
+        +int fresh_retrieval_anchor_delta
+        +bool allow_auto_rename
+        +bool allow_fresh_retrieval
+        +bool prefer_deferred_over_guess
+    }
+
+    class AnalysisConfig {
+        +str pipeline_name
+        +str session_name
+        +ExtractionConfig extraction
+        +AnalysisOptions analysis
+        +RuntimePaths resolve_paths()
+    }
+
+    class ExtractionConfig {
+        +str binary
+        +str lua_version
+        +str architecture
+        +str opt_level
+        +str strip_mode
+        +str ghidra_home
+    }
+
+    class AnalysisOptions {
+        +str lua_version
+        +str architecture
+        +int candidate_pool
+        +int topk
+        +str scoring_mode
+        +float min_top1_score
+        +float min_margin
+        +bool iterative
+        +int deferred_top_candidates
+    }
+
+    class ToolResult {
+        +bool ok
+        +str tool_name
+        +dict args
+        +dict result
+        +str error
+        +bool retryable
+        +int retry_count
+    }
+
+    class LuaMcpClient {
+        +call_tool(name, args) ToolResult
+        +extract_query_features(args) ToolResult
+        +detect_lua_scope(args) ToolResult
+        +bulk_query_retrieval(args) ToolResult
+        +targeted_retrieval(args) ToolResult
+        +select_seed_anchors(args) ToolResult
+        +build_runtime_suite(args) ToolResult
+        +run_downstream(config_path) ToolResult
+        +read_final_report(report_json) ToolResult
+        +read_propagation_summary(config_path) ToolResult
+        +get_mapping_distribution(config_path) ToolResult
+        +export_trusted_mappings(config_path) ToolResult
+        +batch_register_force_anchors(config_path, anchors) ToolResult
+        +patch_features_with_confirmed(query_json, confirmed_map) ToolResult
+    }
+
+    class IdaMcpClient {
+        +call_tool(name, args) ToolResult
+        +open_function(entry_point) ToolResult
+        +get_callers(entry_point) ToolResult
+        +get_callees(entry_point) ToolResult
+        +decompile_function(entry_point) ToolResult
+        +inspect_strings(entry_point) ToolResult
+        +rename_function(entry_point, new_name) ToolResult
+    }
+
+    class CandidateContext {
+        +str case_id
+        +str query_func
+        +str entry_point
+        +str predicted_name
+        +float final_score
+        +int mapping_count
+        +list status_reasons
+        +list top_candidates
+        +dict graph_breakdown
+        +list propagation_evidence
+        +dict query_feature_summary
+    }
+
+    class IdaEvidence {
+        +str entry_point
+        +str current_name
+        +str decompiled_code
+        +list callers
+        +list callees
+        +list strings
+        +list constants
+        +int function_size
+        +list errors
+    }
+
+    class LocalLlmReasoner {
+        +rank_trusted(mappings, state) list
+        +select_deferred_cases(cases, state) list
+        +verify_candidate(context, evidence, policy) VerificationDecision
+        +summarize_anchor_reason(decision) str
+        +should_blacklist(distribution_item, state) bool
+        +needs_fresh_retrieval(state) bool
+        +should_stop(state) bool
+    }
+
+    class VerificationDecision {
+        +str case_id
+        +str query_func
+        +str entry_point
+        +str candidate_name
+        +float confidence
+        +bool accepted
+        +bool rename_in_ida
+        +str reason
+        +list evidence
+        +list contradictions
+    }
+
+    class ForceAnchor {
+        +str query_func
+        +str reference_func
+        +str reason
+    }
+
+    class ConfirmedMapBuilder {
+        +load_query_index(query_json) dict
+        +query_func_to_entry_point(query_func) str
+        +build(decisions) dict
+        +to_force_anchors(decisions) list
+    }
+
+    class LangGraphNodes {
+        +init_state(state) AgentState
+        +run_extraction(state) AgentState
+        +detect_scope(state) AgentState
+        +run_bulk_retrieval(state) AgentState
+        +select_seed(state) AgentState
+        +build_suite(state) AgentState
+        +run_downstream(state) AgentState
+        +update_metrics(state) AgentState
+        +analyze_distribution(state) AgentState
+        +update_noise(state) AgentState
+        +export_trusted(state) AgentState
+        +analyze_deferred(state) AgentState
+        +plan_ida_verification(state) AgentState
+        +collect_ida_evidence(state) AgentState
+        +llm_verify_candidate(state) AgentState
+        +apply_ida_rename(state) AgentState
+        +build_confirmed_map(state) AgentState
+        +register_force_anchors(state) AgentState
+        +patch_features(state) AgentState
+        +fresh_bulk_retrieval(state) AgentState
+        +targeted_retrieval(state) AgentState
+        +reselect_seed_with_targeted(state) AgentState
+        +finalize(state) AgentState
+    }
+
+    class RouterPolicy {
+        +after_init(state) str
+        +after_distribution(state) str
+        +after_trusted_export(state) str
+        +after_deferred_analysis(state) str
+        +after_llm_verification(state) str
+        +after_rename_policy(state) str
+        +after_patch_features(state) str
+        +after_stop_check(state) str
+    }
+
+    class StateReducers {
+        +merge_confirmed_map(old, new) dict
+        +append_unique_pending(old, new) list
+        +merge_noise_blacklist(old, new) list
+        +append_tool_failures(old, new) list
+        +replace_metrics(old, new) dict
+    }
+
+    AnalysisConfig *-- ExtractionConfig
+    AnalysisConfig *-- AnalysisOptions
+    AnalysisConfig --> RuntimePaths
+    AgentState *-- RuntimePaths
+    AgentState *-- GraphConfig
+    AgentState --> StateReducers
+    LangGraphNodes --> AgentState
+    LangGraphNodes --> LuaMcpClient
+    LangGraphNodes --> IdaMcpClient
+    LangGraphNodes --> LocalLlmReasoner
+    LangGraphNodes --> RouterPolicy
+    LangGraphNodes --> ConfirmedMapBuilder
+    LuaMcpClient --> ToolResult
+    IdaMcpClient --> ToolResult
+    LocalLlmReasoner --> CandidateContext
+    LocalLlmReasoner --> IdaEvidence
+    LocalLlmReasoner --> VerificationDecision
+    VerificationDecision --> ForceAnchor
+    ConfirmedMapBuilder --> ForceAnchor
+    ConfirmedMapBuilder --> VerificationDecision
+    RouterPolicy --> AgentState

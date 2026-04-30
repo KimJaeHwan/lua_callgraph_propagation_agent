@@ -14,6 +14,10 @@
 - [workflows/runtime_pipeline_overview_ko.md](workflows/runtime_pipeline_overview_ko.md): 전체 런타임 흐름 설명
 - [workflows/runtime_pipeline_flow.mmd](workflows/runtime_pipeline_flow.mmd): 기본 파이프라인 다이어그램
 - [workflows/mcp_ida_analysis_loop.mmd](workflows/mcp_ida_analysis_loop.mmd): MCP + IDA Pro MCP 분석 루프 다이어그램
+- [workflows/langgraph_local_llm_ida_automation.mmd](workflows/langgraph_local_llm_ida_automation.mmd): LangGraph + Local LLM + Lua MCP + IDA MCP 자동화 호출 다이어그램
+- [workflows/langgraph_agent_object_design.mmd](workflows/langgraph_agent_object_design.mmd): LangGraph AgentState, MCP client, reasoner 객체 설계 다이어그램
+- [workflows/langgraph_local_llm_implementation_notes.md](workflows/langgraph_local_llm_implementation_notes.md): LangGraph 실구현 호출 규칙, 상태 갱신, Local LLM 판단 schema
+- [workflows/langgraph_agent_implementation.md](workflows/langgraph_agent_implementation.md): 구현 모듈 위치, MCP adapter contract, 최소 wiring 예시
 
 ## mcp
 

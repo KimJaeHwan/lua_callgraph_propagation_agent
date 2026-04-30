@@ -1,0 +1,220 @@
+flowchart TD
+    START(["START<br/>Runtime config + target binary<br/>or pre-extracted feature JSON"]) --> INIT
+
+    subgraph LG["LangGraph Orchestrator - implementation call order"]
+        direction TB
+        INIT["init_state<br/>load config_path<br/>resolve RuntimePaths<br/>initialize AgentState and GraphConfig"]
+        CHECK_INPUT{"query feature JSON exists?"}
+
+        EXTRACT_NODE["run_extraction<br/>Lua MCP: extract_query_features<br/>binary, lua_version, architecture,<br/>session_name, opt_level, strip_mode"]
+        SCOPE_NODE["detect_scope<br/>Lua MCP: detect_lua_scope<br/>query_json, output_json,<br/>bfs_depth, max_pcode_instructions"]
+        BULK_NODE["run_bulk_retrieval<br/>Lua MCP: bulk_query_retrieval<br/>query_json or extract_manifest,<br/>index, output_json, scope_json,<br/>candidate_pool, topk, scoring_mode"]
+        SEED_NODE["select_seed<br/>Lua MCP: select_seed_anchors<br/>retrieval_json, output_json,<br/>query_json, reference_db, scope_json,<br/>dedup_max_per_ref, min_top1_score, min_margin"]
+        SUITE_NODE["build_suite<br/>Lua MCP: build_runtime_suite<br/>retrieval_json, seed_anchor_json,<br/>suite_json, propagation_json,<br/>lua_version, reference_db"]
+        DOWNSTREAM_NODE["run_downstream<br/>Lua MCP: run_downstream<br/>build_suite -> propagation -> deferred -> final_report"]
+        METRICS_NODE["update_metrics<br/>Lua MCP: read_final_report<br/>Lua MCP: read_propagation_summary<br/>update accepted counts, delta,<br/>round_index, convergence_count"]
+
+        DIST_NODE["analyze_distribution<br/>Lua MCP: get_mapping_distribution<br/>find noisy many-to-one reference names"]
+        NOISE_GATE{"new blacklist entries?"}
+        UPDATE_NOISE["update_noise<br/>Lua MCP: update_noise_blacklist<br/>auto add count >= auto_blacklist_threshold<br/>never repeat already-added names"]
+
+        TRUSTED_NODE["export_trusted<br/>Lua MCP: export_trusted_mappings<br/>max_count=1, exclude FUN_/sub_<br/>filter already confirmed entry_points"]
+        TRUSTED_GATE{"trusted queue non-empty?"}
+
+        DEFERRED_NODE["analyze_deferred<br/>Lua MCP: list_deferred_cases<br/>Lua MCP: show_candidate_context<br/>choose high-value unresolved cases"]
+        DEFERRED_GATE{"deferred queue non-empty?"}
+
+        PLAN_VERIFY["plan_ida_verification<br/>merge trusted + deferred queues<br/>rank by score, graph evidence,<br/>anchor density, entry_point availability"]
+        COLLECT_IDA["collect_ida_evidence<br/>IDA MCP: open function<br/>IDA MCP: get_callers / get_callees<br/>IDA MCP: decompile function<br/>IDA MCP: inspect strings/constants"]
+        LLM_VERIFY["llm_verify_candidate<br/>Local LLM receives CandidateContext<br/>returns VerificationDecision JSON<br/>no free-form force anchor allowed"]
+        VERIFY_GATE{"decision.accepted?"}
+        RENAME_GATE{"allow IDA rename?"}
+        APPLY_RENAME["apply_ida_rename<br/>IDA MCP: rename_function<br/>only after positive verification"]
+        BUILD_CONFIRMED["build_confirmed_map<br/>lookup query_func -> entry_point in query_json<br/>write entry_point_hex -> reference_func<br/>skip if entry_point missing"]
+        REGISTER_NODE["register_force_anchors<br/>Lua MCP: batch_register_force_anchors<br/>anchors: query_func, reference_func, reason<br/>downstream rerun occurs once"]
+
+        PATCH_NODE["patch_features<br/>Lua MCP: patch_features_with_confirmed<br/>input: original query_json + confirmed_map<br/>output: patched_query_json"]
+        REFRESH_GATE{"fresh embedding retrieval needed?"}
+        BULK_PATCHED["fresh_bulk_retrieval<br/>Lua MCP: bulk_query_retrieval<br/>query_json = patched_query_json<br/>use when enough new anchors or stale retrieval"]
+        TARGETED_NODE["targeted_retrieval<br/>Lua MCP: targeted_retrieval<br/>patched_query_json, anchors_json,<br/>reference_db, targeted_json,<br/>lua_version, min_vote_score, min_voters"]
+        RESEED_NODE["reselect_seed_with_targeted<br/>Lua MCP: select_seed_anchors<br/>retrieval_json plus targeted_json<br/>scope gate + dedup + targeted thresholds"]
+
+        STOP_GATE{"stop condition met?"}
+        FINALIZE["finalize<br/>write final_summary<br/>accepted, deferred, conflict,<br/>force anchors, blacklist, remaining work"]
+        END_NODE(["END"])
+    end
+
+    subgraph POLICY["Local LLM execution policy"]
+        direction TB
+        POLICY_SAFETY["Safety<br/>never register speculative mappings<br/>prefer deferred over wrong accepted<br/>rename only after structured decision"]
+        POLICY_SCORE["Score thresholds<br/>>= 1.00: still check caller/callee<br/>0.92-0.99: require neighborhood match<br/>0.85-0.91: require decompile evidence<br/>< 0.85: skip unless strong manual evidence"]
+        POLICY_EVIDENCE["Evidence checklist<br/>candidate semantics match decompile<br/>strings/constants/API calls align<br/>caller/callee relation supports candidate<br/>not blacklisted or many-to-one noisy"]
+        POLICY_STOP["Stop rules<br/>round_index >= max_rounds<br/>or convergence_count >= patience<br/>or no trusted/deferred candidates<br/>or repeated tool failures"]
+    end
+
+    subgraph LUA["lua_callgraph_propagation_agent FastMCP"]
+        direction TB
+        LUA_EXTRACT["extract_query_features"]
+        LUA_SCOPE["detect_lua_scope"]
+        LUA_BULK["bulk_query_retrieval"]
+        LUA_SEED["select_seed_anchors"]
+        LUA_SUITE["build_runtime_suite"]
+        LUA_DOWN["run_downstream"]
+        LUA_REPORT["read_final_report<br/>read_propagation_summary<br/>list_deferred_cases<br/>show_candidate_context"]
+        LUA_DIST["get_mapping_distribution"]
+        LUA_NOISE["update_noise_blacklist"]
+        LUA_TRUST["export_trusted_mappings"]
+        LUA_FORCE["batch_register_force_anchors"]
+        LUA_PATCH["patch_features_with_confirmed"]
+        LUA_TARGET["targeted_retrieval"]
+    end
+
+    subgraph IDA["IDA Pro MCP"]
+        direction TB
+        IDA_OPEN["open function by entry_point"]
+        IDA_CALLS["get_callers / get_callees"]
+        IDA_DECOMP["decompile function"]
+        IDA_STRINGS["inspect strings/constants"]
+        IDA_RENAME["rename_function"]
+    end
+
+    subgraph ART["Artifacts and state"]
+        direction TB
+        CONFIG[("config_path")]
+        QUERY[("query_json")]
+        SCOPE[("lua_scope.json")]
+        RETRIEVAL[("retrieval_result.json")]
+        SEED[("seed_anchors.json<br/>auto + force anchors")]
+        SUITE[("suite.json<br/>noise_blacklist")]
+        PROP[("propagation_result.json")]
+        DEFERRED[("deferred_analysis.json")]
+        FINAL[("final_mapping_report.json")]
+        PATCHED[("patched_query_json")]
+        TARGETED[("targeted_retrieval.json")]
+        STATE[("AgentState<br/>paths, counters, confirmed_map,<br/>queues, failures, summaries")]
+    end
+
+    INIT --> CONFIG
+    INIT --> STATE
+    INIT --> CHECK_INPUT
+    CHECK_INPUT -->|"no, binary mode"| EXTRACT_NODE
+    CHECK_INPUT -->|"yes, pre-extracted mode"| SCOPE_NODE
+
+    EXTRACT_NODE -. "MCP" .-> LUA_EXTRACT
+    LUA_EXTRACT --> QUERY
+    EXTRACT_NODE --> SCOPE_NODE
+
+    SCOPE_NODE -. "MCP" .-> LUA_SCOPE
+    LUA_SCOPE --> SCOPE
+    SCOPE_NODE --> BULK_NODE
+
+    BULK_NODE -. "MCP" .-> LUA_BULK
+    QUERY --> BULK_NODE
+    SCOPE --> BULK_NODE
+    LUA_BULK --> RETRIEVAL
+    BULK_NODE --> SEED_NODE
+
+    SEED_NODE -. "MCP" .-> LUA_SEED
+    RETRIEVAL --> SEED_NODE
+    SCOPE --> SEED_NODE
+    LUA_SEED --> SEED
+    SEED_NODE --> SUITE_NODE
+
+    SUITE_NODE -. "MCP" .-> LUA_SUITE
+    RETRIEVAL --> SUITE_NODE
+    SEED --> SUITE_NODE
+    LUA_SUITE --> SUITE
+    SUITE_NODE --> DOWNSTREAM_NODE
+
+    DOWNSTREAM_NODE -. "MCP" .-> LUA_DOWN
+    LUA_DOWN --> PROP
+    LUA_DOWN --> DEFERRED
+    LUA_DOWN --> FINAL
+    DOWNSTREAM_NODE --> METRICS_NODE
+
+    METRICS_NODE -. "MCP" .-> LUA_REPORT
+    METRICS_NODE --> STATE
+    METRICS_NODE --> DIST_NODE
+
+    DIST_NODE -. "MCP" .-> LUA_DIST
+    LUA_DIST --> NOISE_GATE
+    NOISE_GATE -->|"yes"| UPDATE_NOISE
+    NOISE_GATE -->|"no"| TRUSTED_NODE
+    UPDATE_NOISE -. "MCP" .-> LUA_NOISE
+    UPDATE_NOISE --> SUITE
+    UPDATE_NOISE --> DOWNSTREAM_NODE
+
+    TRUSTED_NODE -. "MCP" .-> LUA_TRUST
+    LUA_TRUST --> TRUSTED_GATE
+    TRUSTED_GATE -->|"yes"| PLAN_VERIFY
+    TRUSTED_GATE -->|"no"| DEFERRED_NODE
+
+    DEFERRED_NODE -. "MCP" .-> LUA_REPORT
+    DEFERRED_NODE --> DEFERRED_GATE
+    DEFERRED_GATE -->|"yes"| PLAN_VERIFY
+    DEFERRED_GATE -->|"no"| STOP_GATE
+
+    PLAN_VERIFY --> POLICY_SAFETY
+    POLICY_SAFETY --> POLICY_SCORE
+    POLICY_SCORE --> COLLECT_IDA
+    COLLECT_IDA -. "IDA MCP" .-> IDA_OPEN
+    IDA_OPEN --> IDA_CALLS
+    IDA_CALLS --> IDA_DECOMP
+    IDA_DECOMP --> IDA_STRINGS
+    IDA_STRINGS --> LLM_VERIFY
+    LLM_VERIFY --> POLICY_EVIDENCE
+    POLICY_EVIDENCE --> VERIFY_GATE
+
+    VERIFY_GATE -->|"no"| DEFERRED_NODE
+    VERIFY_GATE -->|"yes"| RENAME_GATE
+    RENAME_GATE -->|"yes"| APPLY_RENAME
+    RENAME_GATE -->|"no"| BUILD_CONFIRMED
+    APPLY_RENAME -. "IDA MCP" .-> IDA_RENAME
+    IDA_RENAME --> BUILD_CONFIRMED
+
+    BUILD_CONFIRMED --> REGISTER_NODE
+    REGISTER_NODE -. "MCP" .-> LUA_FORCE
+    LUA_FORCE --> SEED
+    REGISTER_NODE --> PATCH_NODE
+
+    PATCH_NODE -. "MCP" .-> LUA_PATCH
+    LUA_PATCH --> PATCHED
+    PATCH_NODE --> REFRESH_GATE
+
+    REFRESH_GATE -->|"yes, precision pass"| BULK_PATCHED
+    REFRESH_GATE -->|"no, fast loop"| TARGETED_NODE
+    BULK_PATCHED -. "MCP" .-> LUA_BULK
+    PATCHED --> BULK_PATCHED
+    BULK_PATCHED --> RETRIEVAL
+    BULK_PATCHED --> TARGETED_NODE
+
+    TARGETED_NODE -. "MCP" .-> LUA_TARGET
+    PATCHED --> TARGETED_NODE
+    SEED --> TARGETED_NODE
+    LUA_TARGET --> TARGETED
+    TARGETED_NODE --> RESEED_NODE
+
+    RESEED_NODE -. "MCP" .-> LUA_SEED
+    TARGETED --> RESEED_NODE
+    RETRIEVAL --> RESEED_NODE
+    RESEED_NODE --> SEED
+    RESEED_NODE --> DOWNSTREAM_NODE
+
+    STOP_GATE --> POLICY_STOP
+    POLICY_STOP -->|"continue"| DIST_NODE
+    POLICY_STOP -->|"stop"| FINALIZE
+    FINALIZE --> END_NODE
+
+    classDef lang fill:#e8f2ff,stroke:#2563eb,stroke-width:1px,color:#0f172a
+    classDef policy fill:#fff7ed,stroke:#f97316,stroke-width:1px,color:#7c2d12
+    classDef mcp fill:#ecfdf5,stroke:#10b981,stroke-width:1px,color:#064e3b
+    classDef ida fill:#fdf2f8,stroke:#db2777,stroke-width:1px,color:#831843
+    classDef artifact fill:#f8fafc,stroke:#64748b,stroke-width:1px,color:#0f172a
+    classDef gate fill:#fef9c3,stroke:#ca8a04,stroke-width:1px,color:#713f12
+
+    class INIT,CHECK_INPUT,EXTRACT_NODE,SCOPE_NODE,BULK_NODE,SEED_NODE,SUITE_NODE,DOWNSTREAM_NODE,METRICS_NODE,DIST_NODE,UPDATE_NOISE,TRUSTED_NODE,DEFERRED_NODE,PLAN_VERIFY,COLLECT_IDA,LLM_VERIFY,APPLY_RENAME,BUILD_CONFIRMED,REGISTER_NODE,PATCH_NODE,BULK_PATCHED,TARGETED_NODE,RESEED_NODE,FINALIZE,END_NODE lang
+    class POLICY_SAFETY,POLICY_SCORE,POLICY_EVIDENCE,POLICY_STOP policy
+    class LUA_EXTRACT,LUA_SCOPE,LUA_BULK,LUA_SEED,LUA_SUITE,LUA_DOWN,LUA_REPORT,LUA_DIST,LUA_NOISE,LUA_TRUST,LUA_FORCE,LUA_PATCH,LUA_TARGET mcp
+    class IDA_OPEN,IDA_CALLS,IDA_DECOMP,IDA_STRINGS,IDA_RENAME ida
+    class CONFIG,QUERY,SCOPE,RETRIEVAL,SEED,SUITE,PROP,DEFERRED,FINAL,PATCHED,TARGETED,STATE artifact
+    class NOISE_GATE,TRUSTED_GATE,DEFERRED_GATE,VERIFY_GATE,RENAME_GATE,REFRESH_GATE,STOP_GATE gate
