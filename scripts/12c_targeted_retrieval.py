@@ -2,13 +2,16 @@
 """
 12c_targeted_retrieval.py
 
-Targeted retrieval using callgraph neighbor constraints.
+Targeted retrieval using callgraph neighbor constraints with optional
+reference-string tie-breaking.
 
 For each unconfirmed query function Q that shares a callgraph edge with at
 least one confirmed anchor, restricts the candidate pool to the reference
 callgraph neighbors of those anchors and scores by vote consensus.
 
-No embedding model required - pure structural evidence.
+No embedding model required - primarily structural evidence, with a small
+reference string bonus used only to break ties between structurally similar
+candidates.
 
 Scoring (vote_score)
 --------------------
@@ -20,6 +23,11 @@ Scoring (vote_score)
   vote_score(Q → N) = confirmed_neighbors_that_vote_for_N
                       / total_confirmed_neighbors_of_Q
   Range 0.0–1.0.  1.0 = all confirmed neighbors unanimously agree.
+
+  score_total = vote_score + string_bonus
+  string_bonus is capped and intentionally small, so callgraph structure
+  remains the dominant signal while exact/near-exact string overlap can
+  resolve ties more reliably.
 
 Output: targeted_retrieval.json  (same "cases" schema as retrieval_result.json
         so 13_select_seed_anchors.py can consume it directly)
@@ -45,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -73,6 +82,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lua-version",    type=str,  default=None,
                    help="Filter reference DB edges by lua_version (e.g. Lua_536). "
                         "Omit to aggregate across all versions (broader neighbor set).")
+    p.add_argument("--string-bonus-max", type=float, default=0.08,
+                   help="Maximum additive bonus from reference string overlap (default 0.08). "
+                        "Used only to break structural ties; vote_score remains dominant.")
     return p.parse_args()
 
 
@@ -81,6 +93,51 @@ def parse_args() -> argparse.Namespace:
 def _load_json(path: Path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
+
+
+def normalize_strings(values: object) -> set[str]:
+    if not isinstance(values, list):
+        return set()
+    out: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        text = value.strip().lower()
+        if text:
+            out.add(text)
+    return out
+
+
+def string_tokens(strings: set[str]) -> set[str]:
+    tokens: set[str] = set()
+    for text in strings:
+        for token in _TOKEN_RE.findall(text):
+            tokens.add(token.lower())
+    return tokens
+
+
+def overlap_bonus(
+    query_strings: set[str],
+    query_tokens: set[str],
+    ref_strings: set[str],
+    ref_tokens: set[str],
+    max_bonus: float,
+) -> tuple[float, int, int]:
+    exact_overlap = len(query_strings & ref_strings)
+    token_overlap = len(query_tokens & ref_tokens)
+    bonus = 0.0
+    if exact_overlap >= 1:
+        bonus += 0.03
+    if exact_overlap >= 2:
+        bonus += 0.02
+    if token_overlap >= 2:
+        bonus += 0.01
+    if token_overlap >= 4:
+        bonus += 0.01
+    return min(bonus, max_bonus), exact_overlap, token_overlap
 
 
 # ── Confirmed anchor loading ───────────────────────────────────────────────────
@@ -154,6 +211,39 @@ def build_ref_neighbor_index(
     return dict(ref_callees), dict(ref_callers)
 
 
+def build_ref_string_index(
+    db_path: Path,
+    lua_version: str | None,
+) -> dict[str, dict[str, set[str]]]:
+    con = sqlite3.connect(str(db_path))
+    try:
+        if lua_version:
+            rows = con.execute(
+                "SELECT DISTINCT function_name, string_value FROM function_strings "
+                "WHERE lua_version=?",
+                (lua_version,),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT DISTINCT function_name, string_value FROM function_strings"
+            ).fetchall()
+    finally:
+        con.close()
+
+    by_name: dict[str, set[str]] = defaultdict(set)
+    for function_name, string_value in rows:
+        if function_name and string_value:
+            by_name[function_name].add(str(string_value).strip().lower())
+
+    index: dict[str, dict[str, set[str]]] = {}
+    for function_name, strings in by_name.items():
+        index[function_name] = {
+            "strings": strings,
+            "tokens": string_tokens(strings),
+        }
+    return index
+
+
 # ── Query feature loading ──────────────────────────────────────────────────────
 
 def load_query_functions(query_json_path: Path) -> list[dict]:
@@ -198,18 +288,25 @@ def main() -> None:
     # Index callees/callers by function name
     func_callees: dict[str, list[str]] = {}
     func_callers: dict[str, list[str]] = {}
+    func_strings: dict[str, set[str]] = {}
+    func_string_tokens: dict[str, set[str]] = {}
     for f in funcs:
         name = f.get("function_name", "")
         if name:
             func_callees[name] = f.get("callees", [])
             func_callers[name] = f.get("callers", [])
+            q_strings = normalize_strings(f.get("strings", []))
+            func_strings[name] = q_strings
+            func_string_tokens[name] = string_tokens(q_strings)
 
     # ── Build reference neighbor index ────────────────────────────────────────
     print(f"[12c] Building reference neighbor index "
           f"(lua_version={args.lua_version or 'all'})...")
     ref_callees, ref_callers = build_ref_neighbor_index(args.reference_db, args.lua_version)
+    ref_string_index = build_ref_string_index(args.reference_db, args.lua_version)
     print(f"[12c] Reference index: {len(ref_callees)} functions with callees, "
           f"{len(ref_callers)} functions with callers")
+    print(f"[12c] Reference string index: {len(ref_string_index)} functions with strings")
 
     confirmed_query_names = set(confirmed_map.keys())
 
@@ -266,30 +363,59 @@ def main() -> None:
             continue
 
         # Score = vote_count / total_voters  (0.0–1.0)
-        scored = sorted(
-            ((name, cnt / voter_count) for name, cnt in votes.items()),
-            key=lambda x: -x[1],
-        )[:args.topk]
+        query_strs = func_strings.get(func_name, set())
+        query_toks = func_string_tokens.get(func_name, set())
 
-        top_score = scored[0][1]
+        scored = []
+        for name, cnt in votes.items():
+            vote_score = cnt / voter_count
+            ref_str_meta = ref_string_index.get(name, {})
+            bonus, exact_overlap, token_overlap = overlap_bonus(
+                query_strs,
+                query_toks,
+                ref_str_meta.get("strings", set()),
+                ref_str_meta.get("tokens", set()),
+                args.string_bonus_max,
+            )
+            scored.append({
+                "function_name": name,
+                "vote_score": vote_score,
+                "string_bonus": bonus,
+                "exact_string_overlap": exact_overlap,
+                "token_overlap": token_overlap,
+                "score_total": vote_score + bonus,
+                "vote_count": cnt,
+                "voter_count": voter_count,
+            })
+
+        scored.sort(
+            key=lambda item: (
+                -item["score_total"],
+                -item["vote_score"],
+                -item["exact_string_overlap"],
+                -item["token_overlap"],
+                item["function_name"],
+            )
+        )
+        scored = scored[:args.topk]
+
+        top_score = scored[0]["score_total"]
         if top_score < args.min_vote_score:
             continue
-
-        preview = [
-            {
-                "function_name": name,
-                "score_total":   round(score, 6),
-                "vote_count":    votes[name],
-                "voter_count":   voter_count,
-            }
-            for name, score in scored
-        ]
 
         cases.append({
             "query_func":          func_name,
             "voter_count":         voter_count,
             "voter_details":       voter_details,
-            "unique_topk_preview": preview,
+            "unique_topk_preview": [
+                {
+                    **item,
+                    "score_total": round(item["score_total"], 6),
+                    "vote_score": round(item["vote_score"], 6),
+                    "string_bonus": round(item["string_bonus"], 6),
+                }
+                for item in scored
+            ],
         })
 
     # ── Stats ─────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -177,7 +178,8 @@ def bulk_query_retrieval(
         "Targeted retrieval using callgraph neighbor constraints (no embedding model required). "
         "For each unconfirmed query function that shares a callgraph edge with a confirmed anchor, "
         "restricts the candidate pool to the reference callgraph neighbors of that anchor and "
-        "scores candidates by vote consensus. "
+        "scores candidates by vote consensus, then applies a small reference-string bonus only as "
+        "a tie-breaker between structurally similar candidates. "
         "vote_score = confirmed_neighbors_that_agree / total_confirmed_neighbors. "
         "1.0 = unanimous consensus; 0.75 = 3 out of 4 neighbors agree. "
         "Run AFTER a round of propagation has produced confirmed anchors (seed_anchors.json "
@@ -510,6 +512,47 @@ def _load_query_feature_summary(query_file: Path, query_func: str) -> dict[str, 
     return None
 
 
+def _load_reference_string_samples(
+    reference_db: Path,
+    lua_version: str | None,
+    architecture: str | None,
+    function_names: list[str],
+    limit_per_function: int = 8,
+) -> dict[str, list[str]]:
+    if not reference_db.exists() or not function_names:
+        return {}
+
+    unique_names = [name for name in dict.fromkeys(function_names) if name]
+    if not unique_names:
+        return {}
+
+    conn = sqlite3.connect(str(reference_db))
+    try:
+        out: dict[str, list[str]] = {}
+        for function_name in unique_names:
+            clauses = ["function_name = ?"]
+            params: list[Any] = [function_name]
+            if lua_version:
+                clauses.append("lua_version = ?")
+                params.append(lua_version)
+            if architecture:
+                norm_arch = "aarch64" if architecture in {"arm64", "aarch64"} else architecture
+                clauses.append("architecture = ?")
+                params.append(norm_arch)
+            params.append(limit_per_function)
+            rows = conn.execute(
+                "SELECT string_value FROM function_strings "
+                f"WHERE {' AND '.join(clauses)} "
+                "ORDER BY LENGTH(string_value) DESC, string_value ASC "
+                "LIMIT ?",
+                params,
+            ).fetchall()
+            out[function_name] = [row[0] for row in rows]
+        return out
+    finally:
+        conn.close()
+
+
 def _find_deferred_case(deferred_data: dict[str, Any], case_id: str) -> tuple[str | None, dict[str, Any] | None]:
     for key in ("deferred_cases", "conflict_cases"):
         rows = deferred_data.get(key, [])
@@ -797,7 +840,7 @@ def remove_force_anchor(
     description=(
         "Show one analyst-friendly context bundle for a case_id. "
         "Combines the final mapping record, deferred/conflict triage payload, current seed anchor "
-        "status, and a compact query feature summary. "
+        "status, a compact query feature summary, and reference-side string samples for the top candidates. "
         "Use this before deciding whether to register or remove a force anchor. "
         "This is the best single-call context tool for one deferred or conflict case."
     )
@@ -809,6 +852,7 @@ def show_candidate_context(config_path: str, case_id: str) -> dict[str, Any]:
     report_path = _resolve_path(paths["final_report_json"])
     deferred_path = _resolve_path(paths["deferred_output_json"])
     anchor_path = _resolve_path(paths["seed_anchor_json"])
+    reference_db = _resolve_path(paths["reference_db"])
 
     if not report_path.exists():
         return {"ok": False, "error": f"final_report_json not found: {report_path}"}
@@ -836,16 +880,34 @@ def show_candidate_context(config_path: str, case_id: str) -> dict[str, Any]:
     query_summary = _load_query_feature_summary(query_file, query_func) if query_file else None
 
     compact_candidates = []
+    candidate_names: list[str] = []
     if triage_case:
         for cand in triage_case.get("top_candidates", [])[:5]:
+            ref_name = cand.get("reference_function_name") or cand.get("function_name")
+            candidate_names.append(ref_name)
             compact_candidates.append({
-                "reference_function_name": cand.get("reference_function_name"),
-                "candidate_source": cand.get("candidate_source"),
+                "reference_function_name": ref_name,
+                "candidate_source": cand.get("candidate_source") or cand.get("source"),
                 "final_score": cand.get("final_score"),
                 "retrieval_prior": cand.get("retrieval_prior"),
                 "graph_score": cand.get("graph_score"),
                 "graph_breakdown": cand.get("graph_breakdown"),
             })
+
+    ref_string_samples = _load_reference_string_samples(
+        reference_db=reference_db,
+        lua_version=(query_summary or {}).get("lua_version") or mapping_record.get("lua_version"),
+        architecture=(query_summary or {}).get("architecture") or mapping_record.get("architecture"),
+        function_names=candidate_names,
+        limit_per_function=8,
+    )
+
+    if ref_string_samples:
+        for cand in compact_candidates:
+            cand["reference_strings"] = ref_string_samples.get(
+                cand.get("reference_function_name", ""),
+                [],
+            )
 
     return {
         "ok": True,
@@ -854,6 +916,7 @@ def show_candidate_context(config_path: str, case_id: str) -> dict[str, Any]:
         "report_json": str(report_path),
         "deferred_json": str(deferred_path),
         "seed_anchor_json": str(anchor_path),
+        "reference_db": str(reference_db),
         "mapping_record_source": report_section,
         "mapping_record": mapping_record,
         "triage_case_source": triage_section,

@@ -43,7 +43,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_ROOT = (PROJECT_ROOT / "data" / "inputs" / "reference_features").resolve()
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "0.2"
 
 
 @dataclass(frozen=True)
@@ -197,6 +197,25 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_edges_src_name_env ON edges(src_name, lua_version, architecture, opt_level, strip_mode);
         CREATE INDEX idx_edges_dst_name_env ON edges(dst_name, lua_version, architecture, opt_level, strip_mode);
         CREATE INDEX idx_functions_name_env ON functions(function_name, lua_version, architecture, opt_level, strip_mode);
+
+        CREATE TABLE function_strings (
+          string_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          function_id TEXT NOT NULL,
+          function_name TEXT NOT NULL,
+          string_value TEXT NOT NULL,
+          lua_version TEXT,
+          architecture TEXT,
+          opt_level TEXT,
+          strip_mode TEXT,
+          source_json TEXT
+        );
+
+        CREATE UNIQUE INDEX idx_function_strings_unique
+        ON function_strings(function_id, string_value);
+
+        CREATE INDEX idx_function_strings_function_id ON function_strings(function_id);
+        CREATE INDEX idx_function_strings_name_env
+        ON function_strings(function_name, lua_version, architecture, opt_level, strip_mode);
         """
     )
 
@@ -222,7 +241,23 @@ def load_feature_json(path: Path) -> list[dict]:
     return data
 
 
-def insert_feature_file(conn: sqlite3.Connection, meta: FeatureFile, input_root: Path) -> tuple[int, int, int]:
+def iter_clean_strings(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        text = value.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        cleaned.append(text)
+    return cleaned
+
+
+def insert_feature_file(conn: sqlite3.Connection, meta: FeatureFile, input_root: Path) -> tuple[int, int, int, int]:
     rows = load_feature_json(meta.path)
     source_json = str(meta.path.relative_to(input_root))
     internal_names = {row.get("function_name") for row in rows if row.get("function_name")}
@@ -230,6 +265,7 @@ def insert_feature_file(conn: sqlite3.Connection, meta: FeatureFile, input_root:
     function_count = 0
     edge_count = 0
     unresolved_count = 0
+    string_count = 0
 
     for row in rows:
         function_name = row.get("function_name")
@@ -257,6 +293,28 @@ def insert_feature_file(conn: sqlite3.Connection, meta: FeatureFile, input_root:
             ),
         )
         function_count += 1
+
+        for string_value in iter_clean_strings(row.get("strings")):
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO function_strings(
+                  function_id, function_name, string_value, lua_version, architecture,
+                  opt_level, strip_mode, source_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    function_id,
+                    function_name,
+                    string_value,
+                    meta.lua_version,
+                    meta.architecture,
+                    meta.opt_level,
+                    meta.strip_mode,
+                    source_json,
+                ),
+            )
+            string_count += 1
 
     for row in rows:
         src_name = row.get("function_name")
@@ -312,7 +370,7 @@ def insert_feature_file(conn: sqlite3.Connection, meta: FeatureFile, input_root:
             )
             edge_count += 1
 
-    return function_count, edge_count, unresolved_count
+    return function_count, edge_count, unresolved_count, string_count
 
 
 def build_db(input_root: Path, output_db: Path, replace: bool, lua_version: str | None) -> None:
@@ -337,6 +395,7 @@ def build_db(input_root: Path, output_db: Path, replace: bool, lua_version: str 
     total_functions = 0
     total_edges = 0
     total_unresolved = 0
+    total_strings = 0
     env_counter: Counter[tuple[str, str, str, str]] = Counter()
 
     try:
@@ -344,7 +403,7 @@ def build_db(input_root: Path, output_db: Path, replace: bool, lua_version: str 
         insert_metadata(conn, input_root, lua_version)
 
         for feature_file in files:
-            function_count, edge_count, unresolved_count = insert_feature_file(
+            function_count, edge_count, unresolved_count, string_count = insert_feature_file(
                 conn,
                 feature_file,
                 input_root,
@@ -352,6 +411,7 @@ def build_db(input_root: Path, output_db: Path, replace: bool, lua_version: str 
             total_functions += function_count
             total_edges += edge_count
             total_unresolved += unresolved_count
+            total_strings += string_count
             env_counter[
                 (
                     feature_file.lua_version,
@@ -369,6 +429,7 @@ def build_db(input_root: Path, output_db: Path, replace: bool, lua_version: str 
     print(f"Feature files : {len(files)}")
     print(f"Functions     : {total_functions}")
     print(f"Edges         : {total_edges}")
+    print(f"Strings       : {total_strings}")
     print(f"External edges: {total_unresolved}")
     print("By environment:")
     for (lua_version, arch, opt, strip), count in sorted(env_counter.items()):
