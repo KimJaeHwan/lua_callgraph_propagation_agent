@@ -19,6 +19,7 @@ from .state import (
     ToolResult,
     VerificationDecision,
     merge_unique_dicts,
+    normalize_entry_point,
 )
 
 
@@ -121,6 +122,7 @@ class LangGraphAgentNodes:
     def update_metrics(self, state: AgentState) -> AgentState:
         paths = state["paths"]
         report = self.lua.read_final_report(paths["final_report_json"])
+        propagation = self.lua.read_propagation_summary(state["config_path"])
         summary = report.result.get("summary", {}) if report.ok else {}
         current = int(summary.get("accepted") or state.get("current_accepted") or 0)
         last = int(state.get("current_accepted") or 0)
@@ -132,6 +134,7 @@ class LangGraphAgentNodes:
         else:
             convergence = 0
         updated = self._record_tool_result(state, report, phase="metrics_updated")
+        updated = self._record_tool_result(updated, propagation, phase=updated["phase"])
         updated.update({
             "last_accepted": last,
             "current_accepted": current,
@@ -139,6 +142,7 @@ class LangGraphAgentNodes:
             "convergence_count": convergence,
             "round_index": int(state.get("round_index") or 0) + 1,
             "last_report_summary": summary,
+            "last_propagation_summary": propagation.result if propagation.ok else {},
         })
         return updated
 
@@ -185,7 +189,22 @@ class LangGraphAgentNodes:
         updated = self._record_tool_result(state, result, phase="deferred_analyzed")
         if result.ok:
             cases = result.result.get("cases") or result.result.get("deferred") or []
-            updated["pending_deferred"] = self.reasoner.select_deferred_cases(cases, updated)
+            selected = self.reasoner.select_deferred_cases(cases, updated)
+            if not selected and cases:
+                cfg = GraphConfig(**updated.get("graph_config", {}))
+                selected = [case for case in cases if case.get("case_id")][: cfg.max_ida_cases_per_round]
+            context_bundles: list[dict[str, Any]] = []
+            for case in selected:
+                case_id = str(case.get("case_id") or "")
+                if not case_id:
+                    continue
+                context = self.lua.show_candidate_context(updated["config_path"], case_id)
+                updated = self._record_tool_result(updated, context, phase=updated["phase"])
+                if context.ok:
+                    context_bundles.append(context.result)
+                else:
+                    context_bundles.append(case)
+            updated["pending_deferred"] = context_bundles
         return updated
 
     def plan_ida_verification(self, state: AgentState) -> AgentState:
@@ -194,24 +213,74 @@ class LangGraphAgentNodes:
         return {**state, "verification_queue": queue[: cfg.max_ida_cases_per_round], "phase": "verification_planned"}
 
     def collect_ida_evidence(self, state: AgentState) -> AgentState:
-        if self.ida is None:
-            return {**state, "ida_available": False, "phase": "ida_unavailable"}
         queue = state.get("verification_queue", [])
         if not queue:
             return {**state, "phase": "verification_queue_empty"}
-        context = CandidateContext.from_mapping(queue[0])
+        current_item = queue[0]
+        remaining_queue = queue[1:]
+        if current_item.get("mapping_record") or current_item.get("triage_case"):
+            context = CandidateContext.from_context_bundle(current_item)
+        else:
+            context = CandidateContext.from_mapping(current_item)
         entry = context.entry_point
         errors: list[str] = []
-        self.ida.open_function(entry)
-        callers = self.ida.get_callers(entry)
-        callees = self.ida.get_callees(entry)
-        decomp = self.ida.decompile_function(entry)
-        strings = self.ida.inspect_strings(entry)
+        if self.ida is None:
+            evidence = IdaEvidence(
+                entry_point=entry,
+                errors=["ida_unavailable"],
+            )
+            return {
+                **state,
+                "ida_available": False,
+                "verification_queue": remaining_queue,
+                "current_candidate_context": context.to_dict(),
+                "current_ida_evidence": evidence.to_dict(),
+                "phase": "ida_unavailable",
+            }
+
+        open_result = self.ida.open_function(entry)
+        resolved_fn = dict(open_result.result.get("function") or {}) if open_result.ok else {}
+        resolved_entry = normalize_entry_point(
+            resolved_fn.get("addr") or resolved_fn.get("entry_point") or entry
+        )
+        normalized_entry = normalize_entry_point(entry)
+
+        if not resolved_fn:
+            # If IDA cannot resolve a function start, skip LLM verification for this candidate.
+            errors.append(f"ida_function_not_found:{entry}")
+            evidence = IdaEvidence(entry_point=entry, errors=errors)
+            return {
+                **state,
+                "verification_queue": remaining_queue,
+                "current_candidate_context": context.to_dict(),
+                "current_ida_evidence": evidence.to_dict(),
+                "phase": "ida_boundary_mismatch",
+            }
+        if resolved_entry != normalized_entry:
+            # Exclude candidates whose query entry lands inside a different IDA function body.
+            errors.append(f"ida_function_boundary_mismatch:{entry}->{resolved_entry}")
+            evidence = IdaEvidence(
+                entry_point=entry,
+                current_name=str(resolved_fn.get("name") or ""),
+                errors=errors,
+            )
+            return {
+                **state,
+                "verification_queue": remaining_queue,
+                "current_candidate_context": context.to_dict(),
+                "current_ida_evidence": evidence.to_dict(),
+                "phase": "ida_boundary_mismatch",
+            }
+
+        callers = self.ida.get_callers(resolved_entry)
+        callees = self.ida.get_callees(resolved_entry)
+        decomp = self.ida.decompile_function(resolved_entry)
+        strings = self.ida.inspect_strings(resolved_entry)
         for res in (callers, callees, decomp, strings):
             if not res.ok:
                 errors.append(f"{res.tool_name}: {res.error}")
         evidence = IdaEvidence(
-            entry_point=entry,
+            entry_point=resolved_entry,
             current_name=str(decomp.result.get("name") or ""),
             decompiled_code=str(decomp.result.get("code") or decomp.result.get("decompiled") or ""),
             callers=list(callers.result.get("callers") or []),
@@ -220,12 +289,32 @@ class LangGraphAgentNodes:
             constants=list(strings.result.get("constants") or []),
             errors=errors,
         )
-        return {**state, "current_candidate_context": context.to_dict(), "current_ida_evidence": evidence.to_dict(), "phase": "ida_evidence_collected"}
+        return {
+            **state,
+            "verification_queue": remaining_queue,
+            "current_candidate_context": context.to_dict(),
+            "current_ida_evidence": evidence.to_dict(),
+            "phase": "ida_evidence_collected",
+        }
 
     def llm_verify_candidate(self, state: AgentState) -> AgentState:
-        context = CandidateContext(**state.get("current_candidate_context", {}))
+        context_payload = state.get("current_candidate_context") or {}
+        if not context_payload:
+            return {**state, "phase": "candidate_verify_skipped"}
+        context = CandidateContext(**context_payload)
         evidence = IdaEvidence(**state.get("current_ida_evidence", {"entry_point": context.entry_point}))
         cfg = GraphConfig(**state.get("graph_config", {}))
+        if any(
+            err.startswith("ida_function_not_found:") or err.startswith("ida_function_boundary_mismatch:")
+            for err in evidence.errors
+        ):
+            decision = VerificationDecision.rejected(
+                context,
+                "excluded due to IDA function boundary mismatch",
+                evidence.errors,
+            )
+            decisions = state.get("verified_decisions", []) + [decision.to_dict()]
+            return {**state, "current_decision": decision.to_dict(), "verified_decisions": decisions, "phase": "candidate_boundary_skipped"}
         decision = self.reasoner.verify_candidate(context, evidence, cfg, noise_blacklist=state.get("noise_blacklist", []))
         decisions = state.get("verified_decisions", []) + [decision.to_dict()]
         return {**state, "current_decision": decision.to_dict(), "verified_decisions": decisions, "phase": "candidate_verified"}
@@ -243,11 +332,21 @@ class LangGraphAgentNodes:
         paths = state["paths"]
         query_json = paths.get("query_json") or self._query_json_or_manifest_feature(paths)
         builder = ConfirmedMapBuilder(query_json)
-        decisions = [VerificationDecision(**item) for item in state.get("verified_decisions", [])]
-        new_map = builder.build(decisions)
-        merged = {**state.get("confirmed_map", {}), **new_map}
-        anchors = builder.to_force_anchors(decisions)
-        return {**state, "confirmed_map": merged, "pending_force_anchors": anchors, "phase": "confirmed_map_built"}
+        current_decision_dict = state.get("current_decision") or {}
+        if not current_decision_dict:
+            return {**state, "new_confirmed_count": 0, "pending_force_anchors": [], "phase": "confirmed_map_built"}
+        current_decision = VerificationDecision(**current_decision_dict)
+        new_map = builder.build([current_decision])
+        existing = dict(state.get("confirmed_map") or {})
+        merged = {**existing, **new_map}
+        anchors = builder.to_force_anchors([current_decision])
+        return {
+            **state,
+            "confirmed_map": merged,
+            "new_confirmed_count": max(0, len(merged) - len(existing)),
+            "pending_force_anchors": anchors,
+            "phase": "confirmed_map_built",
+        }
 
     def register_force_anchors(self, state: AgentState) -> AgentState:
         anchors = state.get("pending_force_anchors", [])

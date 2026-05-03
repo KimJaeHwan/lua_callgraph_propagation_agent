@@ -61,7 +61,7 @@ class GraphConfig:
     decompile_min_score: float = 0.85
     max_ida_cases_per_round: int = 10
     fresh_retrieval_anchor_delta: int = 20
-    allow_auto_rename: bool = False
+    allow_auto_rename: bool = True
     allow_fresh_retrieval: bool = True
     prefer_deferred_over_guess: bool = True
     max_tool_failures: int = 3
@@ -106,23 +106,91 @@ class CandidateContext:
     entry_point: str = ""
     predicted_name: str = ""
     final_score: float = 0.0
+    score_margin_top1_top2: float = 0.0
     mapping_count: int = 0
+    recommended_action: str = ""
     status_reasons: list[str] = field(default_factory=list)
     top_candidates: list[dict[str, Any]] = field(default_factory=list)
     graph_breakdown: dict[str, Any] = field(default_factory=dict)
     propagation_evidence: list[str] = field(default_factory=list)
     query_feature_summary: dict[str, Any] = field(default_factory=dict)
+    registered_anchors_for_query: list[dict[str, Any]] = field(default_factory=list)
+    reference_db: str = ""
+    source_kind: str = "mapping"
+
+    @staticmethod
+    def _entry_point_from_case_id(case_id: str) -> str:
+        if "@" not in case_id:
+            return ""
+        _, _, suffix = case_id.rpartition("@")
+        return normalize_entry_point(suffix)
+
+    @classmethod
+    def from_context_bundle(cls, bundle: dict[str, Any]) -> "CandidateContext":
+        triage = bundle.get("triage_case") or {}
+        mapping = bundle.get("mapping_record") or {}
+        top_candidates = list(triage.get("top_candidates") or mapping.get("top_candidates") or [])
+        top = top_candidates[0] if top_candidates else {}
+        case_id = str(bundle.get("case_id") or mapping.get("case_id") or "")
+        entry_point = (
+            str(mapping.get("entry_point") or "")
+            or str(bundle.get("entry_point") or "")
+            or cls._entry_point_from_case_id(case_id)
+        )
+        graph_breakdown = dict(top.get("graph_breakdown") or mapping.get("graph_breakdown") or {})
+        status_reasons = list(triage.get("status_reasons") or mapping.get("status_reasons") or mapping.get("reasons") or [])
+        return cls(
+            case_id=case_id,
+            query_func=str(bundle.get("query_func") or mapping.get("query_func") or mapping.get("query_function_name") or ""),
+            entry_point=entry_point,
+            predicted_name=str(
+                triage.get("current_top_prediction")
+                or mapping.get("predicted_name")
+                or mapping.get("predicted_function_name")
+                or top.get("reference_function_name")
+                or top.get("function_name")
+                or ""
+            ),
+            final_score=float(
+                mapping.get("final_score")
+                or top.get("final_score")
+                or top.get("retrieval_prior")
+                or 0.0
+            ),
+            score_margin_top1_top2=float(triage.get("score_margin_top1_top2") or 0.0),
+            mapping_count=int(mapping.get("mapping_count") or 0),
+            recommended_action=str(triage.get("recommended_action") or ""),
+            status_reasons=status_reasons,
+            top_candidates=top_candidates,
+            graph_breakdown=graph_breakdown,
+            propagation_evidence=list(mapping.get("evidence") or top.get("evidence") or []),
+            query_feature_summary=dict(bundle.get("query_feature_summary") or {}),
+            registered_anchors_for_query=list(bundle.get("registered_anchors_for_query") or []),
+            reference_db=str(bundle.get("reference_db") or ""),
+            source_kind="context_bundle",
+        )
 
     @classmethod
     def from_mapping(cls, mapping: dict[str, Any]) -> "CandidateContext":
         top = (mapping.get("top_candidates") or [{}])[0]
+        case_id = str(mapping.get("case_id") or "")
+        entry_point = str(mapping.get("entry_point") or "") or cls._entry_point_from_case_id(case_id)
         return cls(
-            case_id=str(mapping.get("case_id") or ""),
+            case_id=case_id,
             query_func=str(mapping.get("query_func") or mapping.get("query_function_name") or ""),
-            entry_point=str(mapping.get("entry_point") or ""),
-            predicted_name=str(mapping.get("predicted_name") or mapping.get("predicted_function_name") or ""),
+            entry_point=entry_point,
+            predicted_name=str(
+                mapping.get("predicted_name")
+                or mapping.get("predicted_function_name")
+                or mapping.get("current_top_prediction")
+                or top.get("reference_function_name")
+                or top.get("function_name")
+                or ""
+            ),
             final_score=float(mapping.get("final_score") or top.get("final_score") or 0.0),
+            score_margin_top1_top2=float(mapping.get("score_margin_top1_top2") or 0.0),
             mapping_count=int(mapping.get("mapping_count") or 0),
+            recommended_action=str(mapping.get("recommended_action") or ""),
             status_reasons=list(mapping.get("status_reasons") or mapping.get("reasons") or []),
             top_candidates=list(mapping.get("top_candidates") or []),
             graph_breakdown=dict(mapping.get("graph_breakdown") or top.get("graph_breakdown") or {}),
@@ -202,10 +270,16 @@ class AgentStateModel:
     confirmed_map: dict[str, str] = field(default_factory=dict)
     pending_trusted: list[dict[str, Any]] = field(default_factory=list)
     pending_deferred: list[dict[str, Any]] = field(default_factory=list)
+    verification_queue: list[dict[str, Any]] = field(default_factory=list)
     verified_decisions: list[dict[str, Any]] = field(default_factory=list)
+    current_candidate_context: dict[str, Any] = field(default_factory=dict)
+    current_ida_evidence: dict[str, Any] = field(default_factory=dict)
+    current_decision: dict[str, Any] = field(default_factory=dict)
     noise_blacklist: list[str] = field(default_factory=list)
     last_report_summary: dict[str, Any] = field(default_factory=dict)
+    last_propagation_summary: dict[str, Any] = field(default_factory=dict)
     last_distribution: dict[str, Any] = field(default_factory=dict)
+    new_confirmed_count: int = 0
     tool_failures: list[dict[str, Any]] = field(default_factory=list)
     ida_available: bool = True
     done: bool = False
@@ -232,10 +306,16 @@ class AgentState(TypedDict, total=False):
     confirmed_map: dict[str, str]
     pending_trusted: list[dict[str, Any]]
     pending_deferred: list[dict[str, Any]]
+    verification_queue: list[dict[str, Any]]
     verified_decisions: list[dict[str, Any]]
+    current_candidate_context: dict[str, Any]
+    current_ida_evidence: dict[str, Any]
+    current_decision: dict[str, Any]
     noise_blacklist: list[str]
     last_report_summary: dict[str, Any]
+    last_propagation_summary: dict[str, Any]
     last_distribution: dict[str, Any]
+    new_confirmed_count: int
     tool_failures: list[dict[str, Any]]
     ida_available: bool
     done: bool

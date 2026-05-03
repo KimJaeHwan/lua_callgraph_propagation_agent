@@ -50,12 +50,44 @@ class LocalLlmReasoner:
         cfg = GraphConfig(**state.get("graph_config", {}))
         selected = []
         for case in cases:
-            score = float(case.get("final_score") or case.get("score") or 0.0)
+            top_candidates = list(case.get("top_candidates") or [])
+            top = top_candidates[0] if top_candidates else {}
+            score = float(
+                case.get("final_score")
+                or case.get("score")
+                or top.get("final_score")
+                or top.get("retrieval_prior")
+                or 0.0
+            )
             if score and score < cfg.decompile_min_score:
                 continue
-            if not case.get("predicted") and not case.get("predicted_name"):
+            predicted = (
+                case.get("predicted")
+                or case.get("predicted_name")
+                or case.get("predicted_function_name")
+                or case.get("current_top_prediction")
+                or top.get("reference_function_name")
+                or top.get("function_name")
+            )
+            if not predicted:
+                continue
+            margin = float(case.get("score_margin_top1_top2") or 0.0)
+            anchor_counts = case.get("anchor_counts") or {}
+            total_anchor_edges = int(anchor_counts.get("total") or 0)
+            if margin == 0.0 and total_anchor_edges == 0 and score < max(cfg.decompile_min_score, 0.90):
                 continue
             selected.append(case)
+        selected.sort(
+            key=lambda item: (
+                -float(
+                    item.get("final_score")
+                    or item.get("score")
+                    or ((item.get("top_candidates") or [{}])[0].get("final_score") or 0.0)
+                ),
+                -int((item.get("anchor_counts") or {}).get("total") or 0),
+                -float(item.get("score_margin_top1_top2") or 0.0),
+            )
+        )
         return selected[: cfg.max_ida_cases_per_round]
 
     def verify_candidate(
@@ -98,17 +130,25 @@ class LocalLlmReasoner:
             return VerificationDecision.rejected(context, "candidate is noise-blacklisted", ["noise_blacklist"])
         if context.mapping_count and context.mapping_count > 1:
             contradictions.append(f"mapping_count={context.mapping_count}")
+        if context.recommended_action and "manual" in context.recommended_action.lower():
+            contradictions.append(f"recommended_action={context.recommended_action}")
         if context.final_score >= graph_config.trusted_min_score:
             support.append(f"final_score={context.final_score:.4f}")
+        if context.score_margin_top1_top2 > 0:
+            support.append(f"margin={context.score_margin_top1_top2:.4f}")
         if context.graph_breakdown:
             total_edges = int(context.graph_breakdown.get("total_anchor_edges") or 0)
             primary = int(context.graph_breakdown.get("primary_matches") or 0)
             if total_edges > 0 and primary > 0:
                 support.append(f"graph primary_matches={primary}/{total_edges}")
+        if context.registered_anchors_for_query:
+            support.append(f"registered_anchors={len(context.registered_anchors_for_query)}")
         if evidence.decompiled_code and candidate.lower().replace("lua", "")[:4] in evidence.decompiled_code.lower():
             support.append("candidate-like token appears in decompile")
         if evidence.callers or evidence.callees:
             support.append("IDA caller/callee evidence collected")
+        if evidence.strings:
+            support.append("IDA string evidence collected")
         if evidence.errors:
             contradictions.extend(evidence.errors)
 

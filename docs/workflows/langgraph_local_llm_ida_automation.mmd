@@ -21,12 +21,12 @@ flowchart TD
         TRUSTED_NODE["export_trusted<br/>Lua MCP: export_trusted_mappings<br/>max_count=1, exclude FUN_/sub_<br/>filter already confirmed entry_points"]
         TRUSTED_GATE{"trusted queue non-empty?"}
 
-        DEFERRED_NODE["analyze_deferred<br/>Lua MCP: list_deferred_cases<br/>Lua MCP: show_candidate_context<br/>choose high-value unresolved cases"]
+        DEFERRED_NODE["analyze_deferred<br/>Lua MCP: list_deferred_cases<br/>Lua MCP: show_candidate_context<br/>use context bundle as default deferred input"]
         DEFERRED_GATE{"deferred queue non-empty?"}
 
         PLAN_VERIFY["plan_ida_verification<br/>merge trusted + deferred queues<br/>rank by score, graph evidence,<br/>anchor density, entry_point availability"]
-        COLLECT_IDA["collect_ida_evidence<br/>IDA MCP: open function<br/>IDA MCP: get_callers / get_callees<br/>IDA MCP: decompile function<br/>IDA MCP: inspect strings/constants"]
-        LLM_VERIFY["llm_verify_candidate<br/>Local LLM receives CandidateContext<br/>returns VerificationDecision JSON<br/>no free-form force anchor allowed"]
+        COLLECT_IDA["collect_ida_evidence<br/>normalize entry_point from case_id/context<br/>IDA MCP: open function<br/>IDA MCP: get_callers / get_callees<br/>IDA MCP: decompile function<br/>IDA MCP: inspect strings/constants"]
+        LLM_VERIFY["llm_verify_candidate<br/>Local LLM (LM Studio compatible)<br/>receives CandidateContext + IDA evidence<br/>returns VerificationDecision JSON only"]
         VERIFY_GATE{"decision.accepted?"}
         RENAME_GATE{"allow IDA rename?"}
         APPLY_RENAME["apply_ida_rename<br/>IDA MCP: rename_function<br/>only after positive verification"]

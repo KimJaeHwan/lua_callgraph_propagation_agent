@@ -212,3 +212,21 @@ else:
 - IDA MCP tool 이름과 실제 인자명은 사용하는 플러그인에 맞춰 adapter가 필요하다.
 - Local LLM의 decompile 해석 품질은 모델 크기와 prompt 품질에 의존한다.
 - fresh retrieval은 sentence-transformers와 index 상태에 따라 비용이 크다.
+
+## 13. 현재 코드 반영 상태
+
+현재 구현 기준으로는 아래 보완이 이미 들어가 있다.
+
+- deferred triage는 `show_candidate_context`를 기본 컨텍스트 번들로 사용한다.
+- `current_top_prediction` 및 `score_margin_top1_top2`를 Local LLM 입력에 반영한다.
+- `case_id`의 `@entry_point` suffix에서 entry point를 정규화한다.
+- `read_propagation_summary`를 metrics 단계에 다시 연결한다.
+- fresh retrieval 분기는 전체 confirmed 수가 아니라 `new_confirmed_count`로 판단한다.
+- LangGraph optional dependency가 없어도 동일한 노드 정책으로 실행 가능한 runner가 있다.
+  - [scripts/22_run_local_llm_agent.py](../../scripts/22_run_local_llm_agent.py)
+
+LM Studio를 실제로 붙일 때는 아래 조합을 표준으로 본다.
+
+- Lua MCP: in-process direct dispatch
+- IDA MCP: streamable HTTP (`http://127.0.0.1:13337/mcp`)
+- Local LLM: LM Studio OpenAI-compatible `/v1/chat/completions`

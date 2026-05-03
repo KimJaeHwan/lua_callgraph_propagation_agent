@@ -96,7 +96,9 @@ def collapse_by_function_name(results: list[dict]) -> list[dict]:
 def main() -> None:
     args = parse_args()
     module = load_module(args.retrieval_script.resolve())
+    print(f"[INFO] loading retrieval index: {args.index.resolve()}")
     index = module.load_index(args.index.resolve())
+    print(f"[INFO] retrieval index loaded: {args.index.resolve()}")
 
     query_json = args.query_json
     if query_json is None and args.extract_manifest is None:
@@ -109,6 +111,7 @@ def main() -> None:
             raise SystemExit(f"No feature files in manifest: {args.extract_manifest}")
         query_json = Path(feature_files[0]).resolve()
 
+    print(f"[INFO] loading query feature JSON: {query_json}")
     with open(query_json, "r", encoding="utf-8") as f:
         rows = json.load(f)
 

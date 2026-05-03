@@ -4,6 +4,7 @@ import subprocess
 import sys
 import json
 import sqlite3
+import os
 from pathlib import Path
 from typing import Any
 
@@ -66,19 +67,48 @@ def _resolve_path(value: str) -> Path:
     return (PROJECT_ROOT / path).resolve()
 
 
-def _run_command(command: list[str]) -> dict[str, Any]:
-    completed = subprocess.run(
+def _run_command(command: list[str], *, stream_output: bool = False) -> dict[str, Any]:
+    if command and command[0] == sys.executable and "-u" not in command[1:2]:
+        command = [command[0], "-u", *command[1:]]
+    env = dict(os.environ)
+    env["PYTHONUNBUFFERED"] = "1"
+    if not stream_output:
+        completed = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+        return {
+            "command": command,
+            "returncode": completed.returncode,
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+            "ok": completed.returncode == 0,
+        }
+
+    process = subprocess.Popen(
         command,
         cwd=PROJECT_ROOT,
         text=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        env=env,
     )
+    stdout_chunks: list[str] = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        stdout_chunks.append(line)
+        print(line, end="")
+    returncode = process.wait()
     return {
         "command": command,
-        "returncode": completed.returncode,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
-        "ok": completed.returncode == 0,
+        "returncode": returncode,
+        "stdout": "".join(stdout_chunks),
+        "stderr": "",
+        "ok": returncode == 0,
     }
 
 
@@ -170,7 +200,7 @@ def bulk_query_retrieval(
         command.extend(["--query-json", str(_resolve_path(query_json))])
     if scope_json:
         command.extend(["--scope-json", str(_resolve_path(scope_json))])
-    return _run_command(command)
+    return _run_command(command, stream_output=True)
 
 
 @mcp.tool(
@@ -582,7 +612,7 @@ def _run_downstream_steps(
     steps: list[dict[str, Any]] = []
 
     def run(name: str, cmd: list[str]) -> bool:
-        result = _run_command(cmd)
+        result = _run_command(cmd, stream_output=True)
         result["step"] = name
         steps.append(result)
         return result["ok"]

@@ -13,6 +13,25 @@ from typing import Any, Protocol
 from .state import ToolResult
 
 
+def _summarize_payload(payload: dict[str, Any], max_items: int = 4) -> str:
+    if not payload:
+        return "{}"
+    parts: list[str] = []
+    for idx, (key, value) in enumerate(payload.items()):
+        if idx >= max_items:
+            parts.append("...")
+            break
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            parts.append(f"{key}={value!r}")
+        elif isinstance(value, list):
+            parts.append(f"{key}=list[{len(value)}]")
+        elif isinstance(value, dict):
+            parts.append(f"{key}=dict[{len(value)}]")
+        else:
+            parts.append(f"{key}=<{type(value).__name__}>")
+    return "{ " + ", ".join(parts) + " }"
+
+
 class SyncToolSession(Protocol):
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         ...
@@ -27,18 +46,23 @@ class BaseMcpClient:
 
     def call_tool(self, name: str, args: dict[str, Any] | None = None) -> ToolResult:
         payload = args or {}
+        print(f"[mcp] call {name} {_summarize_payload(payload)}", flush=True)
         try:
             if callable(self._session) and not hasattr(self._session, "call_tool"):
                 result = self._session(name, payload)
             else:
                 result = self._session.call_tool(name, payload)  # type: ignore[union-attr]
         except Exception as exc:  # pragma: no cover - transport-specific
+            print(f"[mcp] fail {name}: {exc}", flush=True)
             return ToolResult.failure(name, str(exc), payload, retryable=True)
 
         if not isinstance(result, dict):
+            print(f"[mcp] fail {name}: non-dict result {type(result)!r}", flush=True)
             return ToolResult.failure(name, f"tool returned non-dict result: {type(result)!r}", payload)
         if result.get("ok") is False:
+            print(f"[mcp] fail {name}: {result.get('error') or result}", flush=True)
             return ToolResult.failure(name, str(result.get("error") or result), payload, retryable=False)
+        print(f"[mcp] ok   {name}", flush=True)
         return ToolResult.success(name, result, payload)
 
 
@@ -146,3 +170,123 @@ class IdaMcpClient(BaseMcpClient):
 
     def rename_function(self, entry_point: str, new_name: str) -> ToolResult:
         return self.call_tool(self.rename_tool, {"entry_point": entry_point, "new_name": new_name})
+
+
+def _first_payload_row(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        for key in ("items", "results", "functions", "rows", "matches", "data"):
+            value = payload.get(key)
+            if isinstance(value, list) and value and isinstance(value[0], dict):
+                return value[0]
+        return payload
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        return payload[0]
+    return {}
+
+
+def _extract_lookup_function(payload: dict[str, Any]) -> dict[str, Any]:
+    rows = payload.get("result")
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("fn"), dict):
+                return row["fn"]
+    row = _first_payload_row(payload)
+    if isinstance(row.get("fn"), dict):
+        return row["fn"]
+    return {}
+
+
+class CodexIdaMcpClient:
+    """Concrete adapter for the currently used `ida_pro_mcp` tool profile.
+
+    This adapter maps the generic LangGraph evidence needs onto the concrete
+    tools exposed by the active IDA MCP server used in this project:
+
+    - `lookup_funcs`
+    - `xref_query`
+    - `callees`
+    - `decompile`
+    - `analyze_function`
+    - `rename`
+    """
+
+    def __init__(self, session: SyncToolSession | ToolCallable):
+        self.base = BaseMcpClient(session)
+
+    def open_function(self, entry_point: str) -> ToolResult:
+        result = self.base.call_tool("lookup_funcs", {"queries": [entry_point]})
+        if not result.ok:
+            return result
+        return ToolResult.success(
+            "open_function",
+            {"function": _extract_lookup_function(result.result)},
+            {"entry_point": entry_point},
+        )
+
+    def get_callers(self, entry_point: str) -> ToolResult:
+        args = {
+            "queries": [{
+                "addr": entry_point,
+                "direction": "to",
+                "xref_type": "code",
+                "include_fn": True,
+                "count": 128,
+            }],
+        }
+        result = self.base.call_tool("xref_query", args)
+        if not result.ok:
+            return result
+        row = _first_payload_row(result.result)
+        xrefs = row.get("xrefs") or result.result.get("xrefs") or []
+        callers = [
+            x.get("fn_name") or x.get("name") or x.get("addr")
+            for x in xrefs
+            if isinstance(x, dict)
+        ]
+        return ToolResult.success("get_callers", {"callers": callers, "xrefs": xrefs}, {"entry_point": entry_point})
+
+    def get_callees(self, entry_point: str) -> ToolResult:
+        result = self.base.call_tool("callees", {"addrs": [entry_point], "limit": 128})
+        if not result.ok:
+            return result
+        row = _first_payload_row(result.result)
+        callees = row.get("callees") or result.result.get("callees") or []
+        names = [
+            c.get("name") or c.get("func_name") or c.get("addr")
+            for c in callees
+            if isinstance(c, dict)
+        ]
+        return ToolResult.success("get_callees", {"callees": names, "rows": callees}, {"entry_point": entry_point})
+
+    def decompile_function(self, entry_point: str) -> ToolResult:
+        decomp = self.base.call_tool("decompile", {"addr": entry_point, "include_addresses": False})
+        if not decomp.ok:
+            return decomp
+        lookup = self.base.call_tool("lookup_funcs", {"queries": [entry_point]})
+        name = ""
+        if lookup.ok:
+            name = str(_first_payload_row(lookup.result).get("name") or "")
+        code = decomp.result.get("pseudocode") or decomp.result.get("code") or decomp.result.get("decompiled") or ""
+        return ToolResult.success("decompile_function", {"name": name, "code": code}, {"entry_point": entry_point})
+
+    def inspect_strings(self, entry_point: str) -> ToolResult:
+        result = self.base.call_tool("analyze_function", {"addr": entry_point, "include_asm": False})
+        if not result.ok:
+            return result
+        strings = result.result.get("strings") or []
+        constants = result.result.get("constants") or []
+        return ToolResult.success("inspect_strings", {"strings": strings, "constants": constants}, {"entry_point": entry_point})
+
+    def rename_function(self, entry_point: str, new_name: str) -> ToolResult:
+        result = self.base.call_tool(
+            "rename",
+            {
+                "batch": {
+                    "func": [{"addr": entry_point, "name": new_name}],
+                    "stop_on_error": True,
+                },
+            },
+        )
+        if not result.ok:
+            return result
+        return ToolResult.success("rename_function", result.result, {"entry_point": entry_point, "new_name": new_name})

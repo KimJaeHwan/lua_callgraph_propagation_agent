@@ -6,10 +6,12 @@ This package now includes an implementation scaffold for the LangGraph + Local L
 
 - `src/lua_callgraph_propagation_agent/langgraph_agent/state.py` — state models and schemas
 - `src/lua_callgraph_propagation_agent/langgraph_agent/clients.py` — Lua MCP / IDA MCP sync adapters
+- `src/lua_callgraph_propagation_agent/langgraph_agent/lmstudio.py` — LM Studio OpenAI-compatible JSON adapter
 - `src/lua_callgraph_propagation_agent/langgraph_agent/confirmed.py` — `query_func` to `entry_point` confirmed-map conversion
 - `src/lua_callgraph_propagation_agent/langgraph_agent/reasoner.py` — Local LLM structured verification contract and deterministic fallback
 - `src/lua_callgraph_propagation_agent/langgraph_agent/nodes.py` — LangGraph node implementations
 - `src/lua_callgraph_propagation_agent/langgraph_agent/graph.py` — graph wiring and router policy
+- `scripts/22_run_local_llm_agent.py` — manual orchestrator using the same node/routing policy without requiring `langgraph` at runtime
 
 ## Install optional agent dependencies
 
@@ -56,15 +58,7 @@ from lua_callgraph_propagation_agent.langgraph_agent import (
 )
 
 lua_client = LuaMcpClient(lua_session)
-ida_client = IdaMcpClient(
-    ida_session,
-    open_tool="open_function",
-    callers_tool="get_callers",
-    callees_tool="get_callees",
-    decompile_tool="decompile_function",
-    strings_tool="inspect_strings",
-    rename_tool="rename_function",
-)
+ida_client = IdaMcpClient(ida_session)
 reasoner = LocalLlmReasoner(model=local_json_llm)
 nodes = LangGraphAgentNodes(lua=lua_client, ida=ida_client, reasoner=reasoner)
 graph = build_graph(nodes)
@@ -99,5 +93,6 @@ The reasoner validates and coerces the result into `VerificationDecision`. If no
 ## Implementation caveats
 
 - IDA MCP tool names vary by plugin. Use `IdaMcpClient(..., decompile_tool=..., rename_tool=...)` to adapt names.
+- For the current project workflow there is also a concrete adapter: `CodexIdaMcpClient`.
 - `bulk_query_retrieval` on patched features requires `sentence-transformers` and can be expensive.
-- The current graph processes one verification queue item per loop. Batch verification can be added later by extending `collect_ida_evidence()` and `llm_verify_candidate()`.
+- The current workflow consumes the verification queue one item at a time and can continue to the next item on rejection.

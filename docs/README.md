@@ -18,6 +18,7 @@
 - [workflows/langgraph_agent_object_design.mmd](workflows/langgraph_agent_object_design.mmd): LangGraph AgentState, MCP client, reasoner 객체 설계 다이어그램
 - [workflows/langgraph_local_llm_implementation_notes.md](workflows/langgraph_local_llm_implementation_notes.md): LangGraph 실구현 호출 규칙, 상태 갱신, Local LLM 판단 schema
 - [workflows/langgraph_agent_implementation.md](workflows/langgraph_agent_implementation.md): 구현 모듈 위치, MCP adapter contract, 최소 wiring 예시
+- [workflows/local_llm_runtime_final_design_ko.md](workflows/local_llm_runtime_final_design_ko.md): LM Studio + Lua MCP + IDA MCP 최종 운영 설계와 실행 예시
 
 ## mcp
 

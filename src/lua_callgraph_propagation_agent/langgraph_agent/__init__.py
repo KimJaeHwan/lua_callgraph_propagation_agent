@@ -1,8 +1,9 @@
 """LangGraph local-LLM automation layer for Lua callgraph propagation."""
 
-from .clients import IdaMcpClient, LuaMcpClient
+from .clients import CodexIdaMcpClient, IdaMcpClient, LuaMcpClient
 from .confirmed import ConfirmedMapBuilder
 from .graph import build_graph
+from .lmstudio import LmStudioJsonModel
 from .nodes import LangGraphAgentNodes
 from .reasoner import LocalLlmReasoner, VERIFICATION_SCHEMA, build_verification_prompt
 from .state import (
@@ -21,10 +22,12 @@ __all__ = [
     "AgentStateModel",
     "CandidateContext",
     "ConfirmedMapBuilder",
+    "CodexIdaMcpClient",
     "GraphConfig",
     "IdaEvidence",
     "IdaMcpClient",
     "LangGraphAgentNodes",
+    "LmStudioJsonModel",
     "LocalLlmReasoner",
     "LuaMcpClient",
     "RuntimePaths",

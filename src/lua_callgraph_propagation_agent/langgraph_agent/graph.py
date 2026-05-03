@@ -62,7 +62,9 @@ def route_after_deferred(state: AgentState) -> Route:
 
 def route_after_verification(state: AgentState) -> Route:
     decision = state.get("current_decision", {})
-    return "apply_ida_rename" if decision.get("accepted") else "analyze_deferred"
+    if decision.get("accepted"):
+        return "apply_ida_rename"
+    return "collect_ida_evidence" if state.get("verification_queue") else "analyze_deferred"
 
 
 def route_after_rename(state: AgentState) -> Route:
@@ -71,7 +73,7 @@ def route_after_rename(state: AgentState) -> Route:
 
 def route_after_patch(state: AgentState) -> Route:
     cfg = GraphConfig(**state.get("graph_config", {}))
-    new_confirmed = len(state.get("confirmed_map") or {})
+    new_confirmed = int(state.get("new_confirmed_count") or 0)
     if cfg.allow_fresh_retrieval and new_confirmed >= cfg.fresh_retrieval_anchor_delta:
         return "fresh_bulk_retrieval"
     return "targeted_retrieval"
