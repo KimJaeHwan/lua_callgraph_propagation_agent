@@ -10,6 +10,10 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+
+_JSON_CACHE: dict[str, tuple[float, int, Any]] = {}
+_QUERY_SUMMARY_CACHE: dict[str, tuple[float, int, dict[str, dict[str, Any]]]] = {}
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # config_loader는 scripts/ 에 있으므로 경로 추가 후 import
@@ -486,8 +490,15 @@ def read_mapping_record(report_json: str, case_id: str) -> dict[str, Any]:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    stat = path.stat()
+    cache_key = str(path.resolve())
+    cached = _JSON_CACHE.get(cache_key)
+    if cached and cached[0] == stat.st_mtime and cached[1] == stat.st_size:
+        return cached[2]
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    _JSON_CACHE[cache_key] = (stat.st_mtime, stat.st_size, data)
+    return data
 
 
 def _save_json(path: Path, data: dict[str, Any]) -> None:
@@ -511,35 +522,44 @@ def _load_query_feature_summary(query_file: Path, query_func: str) -> dict[str, 
     if not query_file.exists():
         return None
     try:
-        data = _load_json(query_file)
+        stat = query_file.stat()
+        cache_key = str(query_file.resolve())
+        cached = _QUERY_SUMMARY_CACHE.get(cache_key)
+        if cached and cached[0] == stat.st_mtime and cached[1] == stat.st_size:
+            summary_map = cached[2]
+        else:
+            data = _load_json(query_file)
+            if not isinstance(data, list):
+                return None
+            summary_map: dict[str, dict[str, Any]] = {}
+            for row in data:
+                func_name = row.get("function_name")
+                if not func_name or func_name in summary_map:
+                    continue
+                compare_value = row.get("compare", [])
+                if isinstance(compare_value, list):
+                    compare_value = compare_value[:10]
+                read_write_value = row.get("read_write", [])
+                if isinstance(read_write_value, list):
+                    read_write_value = read_write_value[:10]
+                summary_map[func_name] = {
+                    "function_name": row.get("function_name"),
+                    "entry_point": row.get("entry_point"),
+                    "architecture": row.get("architecture"),
+                    "lua_version": row.get("lua_version"),
+                    "basic_block_count": row.get("basic_block_count"),
+                    "pcode_instruction_count": row.get("pcode_instruction_count"),
+                    "strings": row.get("strings", [])[:10],
+                    "callees": row.get("callees", [])[:10],
+                    "callers": row.get("callers", [])[:10],
+                    "struct_offsets": row.get("struct_offsets", [])[:10],
+                    "compare": compare_value,
+                    "read_write": read_write_value,
+                }
+            _QUERY_SUMMARY_CACHE[cache_key] = (stat.st_mtime, stat.st_size, summary_map)
     except Exception:
         return None
-    if not isinstance(data, list):
-        return None
-    for row in data:
-        if row.get("function_name") != query_func:
-            continue
-        compare_value = row.get("compare", [])
-        if isinstance(compare_value, list):
-            compare_value = compare_value[:10]
-        read_write_value = row.get("read_write", [])
-        if isinstance(read_write_value, list):
-            read_write_value = read_write_value[:10]
-        return {
-            "function_name": row.get("function_name"),
-            "entry_point": row.get("entry_point"),
-            "architecture": row.get("architecture"),
-            "lua_version": row.get("lua_version"),
-            "basic_block_count": row.get("basic_block_count"),
-            "pcode_instruction_count": row.get("pcode_instruction_count"),
-            "strings": row.get("strings", [])[:10],
-            "callees": row.get("callees", [])[:10],
-            "callers": row.get("callers", [])[:10],
-            "struct_offsets": row.get("struct_offsets", [])[:10],
-            "compare": compare_value,
-            "read_write": read_write_value,
-        }
-    return None
+    return summary_map.get(query_func)
 
 
 def _load_reference_string_samples(
@@ -1127,7 +1147,12 @@ def export_trusted_mappings(
 
     # build entry_point lookup from query feature JSON
     addr_map: dict[str, str] = {}
-    query_file_path = _resolve_path(paths.get("query_json", ""))
+    query_feature_path = (
+        paths.get("query_json")
+        or paths.get("query_feature_json")
+        or ""
+    )
+    query_file_path = _resolve_path(query_feature_path) if query_feature_path else Path("")
     if query_file_path.exists():
         try:
             funcs = _load_json(query_file_path)
@@ -1151,10 +1176,12 @@ def export_trusted_mappings(
             continue
         for r in rows:
             qf = r["query_func"]
+            entry_point = addr_map.get(qf, "")
             top = (r.get("top_candidates") or [{}])[0]
             trusted.append({
+                "case_id": f"{qf}@{entry_point}" if entry_point else qf,
                 "query_func": qf,
-                "entry_point": addr_map.get(qf, ""),
+                "entry_point": entry_point,
                 "predicted_name": ref_name,
                 "mapping_count": len(rows),
                 "final_score": top.get("final_score", 0),

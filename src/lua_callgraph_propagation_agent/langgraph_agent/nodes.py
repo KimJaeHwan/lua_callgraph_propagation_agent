@@ -180,6 +180,14 @@ class LangGraphAgentNodes:
         updated = self._record_tool_result(state, result, phase="trusted_exported")
         if result.ok:
             ranked = self.reasoner.rank_trusted(result.result.get("mappings", []), updated)
+            reviewed_case_ids = set(updated.get("reviewed_case_ids") or [])
+            skipped_case_ids = set(updated.get("skipped_case_ids") or [])
+            if reviewed_case_ids or skipped_case_ids:
+                ranked = [
+                    mapping for mapping in ranked
+                    if str(mapping.get("case_id") or "") not in reviewed_case_ids
+                    and str(mapping.get("case_id") or "") not in skipped_case_ids
+                ]
             updated["pending_trusted"] = ranked
         return updated
 
@@ -188,7 +196,13 @@ class LangGraphAgentNodes:
         result = self.lua.list_deferred_cases(paths["final_report_json"])
         updated = self._record_tool_result(state, result, phase="deferred_analyzed")
         if result.ok:
+            skipped_case_ids = set(updated.get("skipped_case_ids") or [])
+            reviewed_case_ids = set(updated.get("reviewed_case_ids") or [])
             cases = result.result.get("cases") or result.result.get("deferred") or []
+            if skipped_case_ids:
+                cases = [case for case in cases if str(case.get("case_id") or "") not in skipped_case_ids]
+            if reviewed_case_ids:
+                cases = [case for case in cases if str(case.get("case_id") or "") not in reviewed_case_ids]
             selected = self.reasoner.select_deferred_cases(cases, updated)
             if not selected and cases:
                 cfg = GraphConfig(**updated.get("graph_config", {}))
@@ -208,8 +222,20 @@ class LangGraphAgentNodes:
         return updated
 
     def plan_ida_verification(self, state: AgentState) -> AgentState:
-        queue = merge_unique_dicts(state.get("pending_trusted", []), state.get("pending_deferred", []), "case_id")
+        combined = merge_unique_dicts(state.get("pending_trusted", []), state.get("pending_deferred", []), "case_id")
         cfg = GraphConfig(**state.get("graph_config", {}))
+        seen_entries: set[str] = set()
+        queue: list[dict[str, Any]] = []
+        for item in combined:
+            if item.get("mapping_record") or item.get("triage_case"):
+                context = CandidateContext.from_context_bundle(item)
+            else:
+                context = CandidateContext.from_mapping(item)
+            normalized_entry = normalize_entry_point(context.entry_point)
+            if normalized_entry in seen_entries:
+                continue
+            seen_entries.add(normalized_entry)
+            queue.append(item)
         return {**state, "verification_queue": queue[: cfg.max_ida_cases_per_round], "phase": "verification_planned"}
 
     def collect_ida_evidence(self, state: AgentState) -> AgentState:
@@ -223,6 +249,7 @@ class LangGraphAgentNodes:
         else:
             context = CandidateContext.from_mapping(current_item)
         entry = context.entry_point
+        normalized_entry = normalize_entry_point(entry)
         errors: list[str] = []
         if self.ida is None:
             evidence = IdaEvidence(
@@ -238,19 +265,51 @@ class LangGraphAgentNodes:
                 "phase": "ida_unavailable",
             }
 
-        open_result = self.ida.open_function(entry)
-        resolved_fn = dict(open_result.result.get("function") or {}) if open_result.ok else {}
-        resolved_entry = normalize_entry_point(
-            resolved_fn.get("addr") or resolved_fn.get("entry_point") or entry
-        )
-        normalized_entry = normalize_entry_point(entry)
+        resolution_cache = dict(state.get("ida_resolution_cache") or {})
+        seen_functions = set(state.get("ida_seen_functions") or [])
+        mismatch_functions = set(state.get("ida_boundary_mismatch_functions") or [])
 
-        if not resolved_fn:
+        cached_resolved = resolution_cache.get(normalized_entry, "")
+        resolved_fn: dict[str, Any] = {}
+        if cached_resolved:
+            resolved_entry = normalize_entry_point(cached_resolved)
+        else:
+            open_result = self.ida.open_function(entry)
+            resolved_fn = dict(open_result.result.get("function") or {}) if open_result.ok else {}
+            resolved_entry = normalize_entry_point(
+                resolved_fn.get("addr") or resolved_fn.get("entry_point") or entry
+            ) if resolved_fn else ""
+            resolution_cache[normalized_entry] = resolved_entry
+
+        if not resolved_entry:
             # If IDA cannot resolve a function start, skip LLM verification for this candidate.
             errors.append(f"ida_function_not_found:{entry}")
             evidence = IdaEvidence(entry_point=entry, errors=errors)
             return {
                 **state,
+                "ida_resolution_cache": resolution_cache,
+                "verification_queue": remaining_queue,
+                "current_candidate_context": context.to_dict(),
+                "current_ida_evidence": evidence.to_dict(),
+                "phase": "ida_boundary_mismatch",
+            }
+        if resolved_entry in seen_functions:
+            errors.append(f"ida_duplicate_function:{entry}->{resolved_entry}")
+            evidence = IdaEvidence(entry_point=resolved_entry, errors=errors)
+            return {
+                **state,
+                "ida_resolution_cache": resolution_cache,
+                "verification_queue": remaining_queue,
+                "current_candidate_context": context.to_dict(),
+                "current_ida_evidence": evidence.to_dict(),
+                "phase": "ida_duplicate_function",
+            }
+        if resolved_entry in mismatch_functions and resolved_entry != normalized_entry:
+            errors.append(f"ida_function_boundary_mismatch:{entry}->{resolved_entry}")
+            evidence = IdaEvidence(entry_point=resolved_entry, errors=errors)
+            return {
+                **state,
+                "ida_resolution_cache": resolution_cache,
                 "verification_queue": remaining_queue,
                 "current_candidate_context": context.to_dict(),
                 "current_ida_evidence": evidence.to_dict(),
@@ -259,6 +318,7 @@ class LangGraphAgentNodes:
         if resolved_entry != normalized_entry:
             # Exclude candidates whose query entry lands inside a different IDA function body.
             errors.append(f"ida_function_boundary_mismatch:{entry}->{resolved_entry}")
+            mismatch_functions.add(resolved_entry)
             evidence = IdaEvidence(
                 entry_point=entry,
                 current_name=str(resolved_fn.get("name") or ""),
@@ -266,31 +326,34 @@ class LangGraphAgentNodes:
             )
             return {
                 **state,
+                "ida_resolution_cache": resolution_cache,
+                "ida_boundary_mismatch_functions": sorted(mismatch_functions),
                 "verification_queue": remaining_queue,
                 "current_candidate_context": context.to_dict(),
                 "current_ida_evidence": evidence.to_dict(),
                 "phase": "ida_boundary_mismatch",
             }
 
-        callers = self.ida.get_callers(resolved_entry)
-        callees = self.ida.get_callees(resolved_entry)
-        decomp = self.ida.decompile_function(resolved_entry)
-        strings = self.ida.inspect_strings(resolved_entry)
-        for res in (callers, callees, decomp, strings):
-            if not res.ok:
-                errors.append(f"{res.tool_name}: {res.error}")
+        # Keep IDA verification light: resolve the function once, then reuse a single
+        # analyze_function payload instead of separate xref/decompile/string round-trips.
+        analysis = self.ida.inspect_strings(resolved_entry)
+        if not analysis.ok:
+            errors.append(f"{analysis.tool_name}: {analysis.error}")
         evidence = IdaEvidence(
             entry_point=resolved_entry,
-            current_name=str(decomp.result.get("name") or ""),
-            decompiled_code=str(decomp.result.get("code") or decomp.result.get("decompiled") or ""),
-            callers=list(callers.result.get("callers") or []),
-            callees=list(callees.result.get("callees") or []),
-            strings=list(strings.result.get("strings") or []),
-            constants=list(strings.result.get("constants") or []),
+            current_name=str(analysis.result.get("name") or resolved_fn.get("name") or ""),
+            decompiled_code=str(analysis.result.get("decompiled") or ""),
+            callers=list(analysis.result.get("callers") or []),
+            callees=list(analysis.result.get("callees") or []),
+            strings=list(analysis.result.get("strings") or []),
+            constants=list(analysis.result.get("constants") or []),
             errors=errors,
         )
+        seen_functions.add(resolved_entry)
         return {
             **state,
+            "ida_resolution_cache": resolution_cache,
+            "ida_seen_functions": sorted(seen_functions),
             "verification_queue": remaining_queue,
             "current_candidate_context": context.to_dict(),
             "current_ida_evidence": evidence.to_dict(),
@@ -304,20 +367,49 @@ class LangGraphAgentNodes:
         context = CandidateContext(**context_payload)
         evidence = IdaEvidence(**state.get("current_ida_evidence", {"entry_point": context.entry_point}))
         cfg = GraphConfig(**state.get("graph_config", {}))
+        reviewed_case_ids = list(state.get("reviewed_case_ids") or [])
+        if context.case_id and context.case_id not in reviewed_case_ids:
+            reviewed_case_ids.append(context.case_id)
         if any(
-            err.startswith("ida_function_not_found:") or err.startswith("ida_function_boundary_mismatch:")
+            err.startswith("ida_function_not_found:")
+            or err.startswith("ida_function_boundary_mismatch:")
+            or err.startswith("ida_duplicate_function:")
             for err in evidence.errors
         ):
+            skipped_case_ids = list(state.get("skipped_case_ids") or [])
+            if context.case_id and context.case_id not in skipped_case_ids:
+                skipped_case_ids.append(context.case_id)
             decision = VerificationDecision.rejected(
                 context,
-                "excluded due to IDA function boundary mismatch",
+                "excluded due to IDA function filtering",
                 evidence.errors,
             )
             decisions = state.get("verified_decisions", []) + [decision.to_dict()]
-            return {**state, "current_decision": decision.to_dict(), "verified_decisions": decisions, "phase": "candidate_boundary_skipped"}
+            return {
+                **state,
+                "current_decision": decision.to_dict(),
+                "verified_decisions": decisions,
+                "skipped_case_ids": skipped_case_ids,
+                "reviewed_case_ids": reviewed_case_ids,
+                "phase": "candidate_boundary_skipped",
+            }
         decision = self.reasoner.verify_candidate(context, evidence, cfg, noise_blacklist=state.get("noise_blacklist", []))
         decisions = state.get("verified_decisions", []) + [decision.to_dict()]
-        return {**state, "current_decision": decision.to_dict(), "verified_decisions": decisions, "phase": "candidate_verified"}
+        print(
+            "[agent] decision "
+            f"case={context.case_id or context.query_func} "
+            f"accepted={decision.accepted} rename={decision.rename_in_ida} "
+            f"confidence={decision.confidence:.3f} candidate={decision.candidate_name!r} "
+            f"reason={decision.reason}",
+            flush=True,
+        )
+        return {
+            **state,
+            "current_decision": decision.to_dict(),
+            "verified_decisions": decisions,
+            "reviewed_case_ids": reviewed_case_ids,
+            "phase": "candidate_verified",
+        }
 
     def apply_ida_rename(self, state: AgentState) -> AgentState:
         if self.ida is None:

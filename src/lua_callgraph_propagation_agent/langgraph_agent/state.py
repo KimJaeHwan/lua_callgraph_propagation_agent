@@ -275,6 +275,11 @@ class AgentStateModel:
     current_candidate_context: dict[str, Any] = field(default_factory=dict)
     current_ida_evidence: dict[str, Any] = field(default_factory=dict)
     current_decision: dict[str, Any] = field(default_factory=dict)
+    ida_resolution_cache: dict[str, str] = field(default_factory=dict)
+    ida_seen_functions: list[str] = field(default_factory=list)
+    ida_boundary_mismatch_functions: list[str] = field(default_factory=list)
+    skipped_case_ids: list[str] = field(default_factory=list)
+    reviewed_case_ids: list[str] = field(default_factory=list)
     noise_blacklist: list[str] = field(default_factory=list)
     last_report_summary: dict[str, Any] = field(default_factory=dict)
     last_propagation_summary: dict[str, Any] = field(default_factory=dict)
@@ -311,6 +316,11 @@ class AgentState(TypedDict, total=False):
     current_candidate_context: dict[str, Any]
     current_ida_evidence: dict[str, Any]
     current_decision: dict[str, Any]
+    ida_resolution_cache: dict[str, str]
+    ida_seen_functions: list[str]
+    ida_boundary_mismatch_functions: list[str]
+    skipped_case_ids: list[str]
+    reviewed_case_ids: list[str]
     noise_blacklist: list[str]
     last_report_summary: dict[str, Any]
     last_propagation_summary: dict[str, Any]

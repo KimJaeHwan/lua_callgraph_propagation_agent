@@ -199,8 +199,12 @@ def build_verification_prompt(
         "task": "Verify whether a stripped query function should be force-anchored to the candidate Lua reference name.",
         "policy": {
             "prefer_deferred_over_guess": graph_config.prefer_deferred_over_guess,
-            "minimum_confidence_for_accept": graph_config.trusted_min_score,
+            # Keep the model's acceptance threshold aligned with coerce_decision().
+            "minimum_confidence_for_accept": graph_config.decompile_min_score,
+            "minimum_confidence_for_rename": graph_config.trusted_min_score,
             "never_accept_if_blacklisted": True,
+            "graph_evidence_is_a_prior_not_a_hard_requirement": True,
+            "accept_when_ida_semantics_support_the_candidate_even_if_graph_anchors_are_sparse": True,
             "require_structured_json_only": True,
         },
         "candidate_context": context.to_dict(),
@@ -218,6 +222,9 @@ def coerce_decision(raw: dict[str, Any], context: CandidateContext, graph_config
     contradictions = [str(x) for x in raw.get("contradictions") or []]
     if contradictions:
         accepted = False
+    rename_requested = raw.get("rename_in_ida")
+    if rename_requested is None:
+        rename_requested = accepted and confidence >= graph_config.trusted_min_score
     return VerificationDecision(
         case_id=str(raw.get("case_id") or context.case_id),
         query_func=str(raw.get("query_func") or context.query_func),
@@ -225,7 +232,7 @@ def coerce_decision(raw: dict[str, Any], context: CandidateContext, graph_config
         candidate_name=candidate_name,
         confidence=confidence if accepted else 0.0,
         accepted=accepted,
-        rename_in_ida=bool(raw.get("rename_in_ida")) and accepted and graph_config.allow_auto_rename,
+        rename_in_ida=bool(rename_requested) and accepted and graph_config.allow_auto_rename,
         reason=str(raw.get("reason") or ""),
         evidence=[str(x) for x in raw.get("evidence") or []],
         contradictions=contradictions,

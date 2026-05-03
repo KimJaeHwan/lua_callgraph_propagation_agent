@@ -196,6 +196,15 @@ def _extract_lookup_function(payload: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _ida_addr(value: str) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return text
+    if not text.startswith("0x"):
+        text = f"0x{text}"
+    return text
+
+
 class CodexIdaMcpClient:
     """Concrete adapter for the currently used `ida_pro_mcp` tool profile.
 
@@ -214,7 +223,7 @@ class CodexIdaMcpClient:
         self.base = BaseMcpClient(session)
 
     def open_function(self, entry_point: str) -> ToolResult:
-        result = self.base.call_tool("lookup_funcs", {"queries": [entry_point]})
+        result = self.base.call_tool("lookup_funcs", {"queries": [_ida_addr(entry_point)]})
         if not result.ok:
             return result
         return ToolResult.success(
@@ -226,7 +235,7 @@ class CodexIdaMcpClient:
     def get_callers(self, entry_point: str) -> ToolResult:
         args = {
             "queries": [{
-                "addr": entry_point,
+                "addr": _ida_addr(entry_point),
                 "direction": "to",
                 "xref_type": "code",
                 "include_fn": True,
@@ -246,7 +255,7 @@ class CodexIdaMcpClient:
         return ToolResult.success("get_callers", {"callers": callers, "xrefs": xrefs}, {"entry_point": entry_point})
 
     def get_callees(self, entry_point: str) -> ToolResult:
-        result = self.base.call_tool("callees", {"addrs": [entry_point], "limit": 128})
+        result = self.base.call_tool("callees", {"addrs": [_ida_addr(entry_point)], "limit": 128})
         if not result.ok:
             return result
         row = _first_payload_row(result.result)
@@ -259,10 +268,10 @@ class CodexIdaMcpClient:
         return ToolResult.success("get_callees", {"callees": names, "rows": callees}, {"entry_point": entry_point})
 
     def decompile_function(self, entry_point: str) -> ToolResult:
-        decomp = self.base.call_tool("decompile", {"addr": entry_point, "include_addresses": False})
+        decomp = self.base.call_tool("decompile", {"addr": _ida_addr(entry_point), "include_addresses": False})
         if not decomp.ok:
             return decomp
-        lookup = self.base.call_tool("lookup_funcs", {"queries": [entry_point]})
+        lookup = self.base.call_tool("lookup_funcs", {"queries": [_ida_addr(entry_point)]})
         name = ""
         if lookup.ok:
             name = str(_first_payload_row(lookup.result).get("name") or "")
@@ -270,19 +279,34 @@ class CodexIdaMcpClient:
         return ToolResult.success("decompile_function", {"name": name, "code": code}, {"entry_point": entry_point})
 
     def inspect_strings(self, entry_point: str) -> ToolResult:
-        result = self.base.call_tool("analyze_function", {"addr": entry_point, "include_asm": False})
+        result = self.base.call_tool("analyze_function", {"addr": _ida_addr(entry_point), "include_asm": False})
         if not result.ok:
             return result
         strings = result.result.get("strings") or []
         constants = result.result.get("constants") or []
-        return ToolResult.success("inspect_strings", {"strings": strings, "constants": constants}, {"entry_point": entry_point})
+        callers = result.result.get("callers") or []
+        callees = result.result.get("callees") or []
+        decompiled = result.result.get("decompiled") or result.result.get("code") or ""
+        current_name = str(result.result.get("name") or "")
+        return ToolResult.success(
+            "inspect_strings",
+            {
+                "strings": strings,
+                "constants": constants,
+                "callers": callers,
+                "callees": callees,
+                "decompiled": decompiled,
+                "name": current_name,
+            },
+            {"entry_point": entry_point},
+        )
 
     def rename_function(self, entry_point: str, new_name: str) -> ToolResult:
         result = self.base.call_tool(
             "rename",
             {
                 "batch": {
-                    "func": [{"addr": entry_point, "name": new_name}],
+                    "func": [{"addr": _ida_addr(entry_point), "name": new_name}],
                     "stop_on_error": True,
                 },
             },

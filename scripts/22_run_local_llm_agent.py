@@ -14,7 +14,10 @@ import asyncio
 import json
 from pathlib import Path
 import sys
+from datetime import timedelta
 from typing import Any
+import urllib.error
+import urllib.request
 
 from fastmcp import Client
 
@@ -82,32 +85,98 @@ class HttpMcpSession:
     def __init__(self, url: str, *, timeout_seconds: float = 60.0):
         self.url = url
         self.timeout_seconds = timeout_seconds
+        self._initialized = False
+        self._request_id = 0
 
-    async def _call_once(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    def _next_id(self) -> int:
+        self._request_id += 1
+        return self._request_id
+
+    def _post_json(self, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            raw = response.read().decode("utf-8").strip()
+            if not raw:
+                return {}
+            return json.loads(raw)
+
+    def _post_notification(self, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds):
+            return
+
+    def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "codex-ida-client", "version": "0.1.0"},
+            },
+        }
+        self._post_json(init_payload)
+        initialized_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": None,
+        }
+        self._post_notification(initialized_payload)
+        self._initialized = True
+
+    def _call_once(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         print(f"[ida-mcp] -> {name}", flush=True)
-        async with Client(self.url, timeout=self.timeout_seconds) as client:
-            result = await client.call_tool(name, args, raise_on_error=False)
-        if result.is_error:
-            content_text = []
-            for block in result.content:
-                text = getattr(block, "text", None)
-                if text:
-                    content_text.append(text)
-            error = "\n".join(content_text) or f"{name} returned MCP error"
+        self._ensure_initialized()
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        }
+        result = self._post_json(payload)
+        if "error" in result:
+            error = str(result["error"])
             print(f"[ida-mcp] !! {name}: {error}", flush=True)
             return {"ok": False, "error": error}
-        if isinstance(result.data, dict):
-            payload = dict(result.data)
-        elif isinstance(result.structured_content, dict):
-            payload = dict(result.structured_content)
+        rpc_result = result.get("result") or {}
+        if isinstance(rpc_result.get("structuredContent"), dict):
+            payload = dict(rpc_result["structuredContent"])
+        elif isinstance(rpc_result, dict):
+            payload = dict(rpc_result)
         else:
-            payload = {"content": [getattr(block, "text", str(block)) for block in result.content]}
+            payload = {"content": rpc_result}
         payload.setdefault("ok", True)
         print(f"[ida-mcp] <- {name} ok", flush=True)
         return payload
 
     def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        return asyncio.run(self._call_once(name, args))
+        try:
+            return self._call_once(name, args)
+        except Exception as exc:
+            # If the MCP server restarted, redo the handshake and retry once.
+            self._initialized = False
+            try:
+                return self._call_once(name, args)
+            except Exception:
+                raise RuntimeError(f"Client failed to connect: {exc}") from exc
+
+    def close(self) -> None:
+        self._initialized = False
 
 
 def build_state(config_path: str, args: argparse.Namespace) -> dict[str, Any]:
@@ -316,8 +385,10 @@ def main() -> int:
     lua_client = LuaMcpClient(DirectLuaToolSession())
 
     ida_client = None
+    ida_session = None
     if not args.no_ida and args.ida_url:
-        ida_client = CodexIdaMcpClient(HttpMcpSession(args.ida_url))
+        ida_session = HttpMcpSession(args.ida_url)
+        ida_client = CodexIdaMcpClient(ida_session)
 
     model = None
     if args.lmstudio_model:
@@ -332,7 +403,11 @@ def main() -> int:
     nodes = LangGraphAgentNodes(lua=lua_client, ida=ida_client, reasoner=reasoner)
     state = build_state(config_path, args)
     state["allow_extraction"] = bool(args.allow_extraction)
-    result = run_manual_orchestrator(nodes, state)
+    try:
+        result = run_manual_orchestrator(nodes, state)
+    finally:
+        if ida_session is not None:
+            ida_session.close()
 
     summary = {
         "phase": result.get("phase"),
