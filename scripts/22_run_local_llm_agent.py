@@ -180,25 +180,24 @@ class HttpMcpSession:
 
 
 def build_state(config_path: str, args: argparse.Namespace) -> dict[str, Any]:
-    graph_cfg = GraphConfig(
-        max_rounds=args.max_rounds,
-        convergence_patience=args.convergence_patience,
-        min_delta_accepted=args.min_delta_accepted,
-        suspicious_threshold=args.suspicious_threshold,
-        auto_blacklist_threshold=args.auto_blacklist_threshold,
-        trusted_min_score=args.trusted_min_score,
-        decompile_min_score=args.decompile_min_score,
-        max_ida_cases_per_round=args.max_ida_cases_per_round,
-        fresh_retrieval_anchor_delta=args.fresh_retrieval_anchor_delta,
-        allow_auto_rename=not args.no_auto_rename,
-        allow_fresh_retrieval=not args.no_fresh_retrieval,
-        prefer_deferred_over_guess=not args.allow_guessy_accept,
-        max_tool_failures=args.max_tool_failures,
-    )
-    return AgentStateModel(
+    graph_cfg_overrides = {
+        "max_rounds": args.max_rounds,
+        "convergence_patience": args.convergence_patience,
+        "min_delta_accepted": args.min_delta_accepted,
+        "suspicious_threshold": args.suspicious_threshold,
+        "auto_blacklist_threshold": args.auto_blacklist_threshold,
+        "max_ida_cases_per_round": args.max_ida_cases_per_round,
+        "fresh_retrieval_anchor_delta": args.fresh_retrieval_anchor_delta,
+        "allow_auto_rename": not args.no_auto_rename,
+        "allow_fresh_retrieval": not args.no_fresh_retrieval,
+        "prefer_deferred_over_guess": not args.allow_guessy_accept,
+        "max_tool_failures": args.max_tool_failures,
+    }
+    state = AgentStateModel(
         config_path=config_path,
-        graph_config=graph_cfg,
     ).to_dict()
+    state["graph_config"] = graph_cfg_overrides
+    return state
 
 
 def validate_preextracted_inputs(config_path: str, *, allow_extraction: bool) -> None:
@@ -368,8 +367,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-delta-accepted", type=int, default=5)
     parser.add_argument("--suspicious-threshold", type=int, default=5)
     parser.add_argument("--auto-blacklist-threshold", type=int, default=10)
-    parser.add_argument("--trusted-min-score", type=float, default=0.92)
-    parser.add_argument("--decompile-min-score", type=float, default=0.85)
     parser.add_argument("--max-ida-cases-per-round", type=int, default=10)
     parser.add_argument("--fresh-retrieval-anchor-delta", type=int, default=20)
     parser.add_argument("--max-tool-failures", type=int, default=3)

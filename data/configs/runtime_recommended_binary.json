@@ -28,5 +28,35 @@
     "deferred_analysis": {
       "top_candidates": 5
     }
+  },
+  "graph_config": {
+    "max_rounds": 20,
+    "convergence_patience": 3,
+    "min_delta_accepted": 5,
+    "suspicious_threshold": 5,
+    "auto_blacklist_threshold": 10,
+    "seed_min_top1_score": 0.92,
+    "seed_min_margin": 0.05,
+    "seed_dedup_max_per_ref": 1,
+    "targeted_min_score": 0.74,
+    "targeted_min_margin": 0.15,
+    "trusted_min_score": 0.9,
+    "decompile_min_score": 0.8,
+    "deferred_min_score_relaxation": 0.05,
+    "deferred_no_graph_min_score": 0.88,
+    "max_ida_cases_per_round": 10,
+    "fresh_retrieval_anchor_delta": 20,
+    "allow_auto_rename": true,
+    "allow_fresh_retrieval": true,
+    "prefer_deferred_over_guess": true,
+    "max_tool_failures": 3,
+    "rename_min_score": 0.92,
+    "rename_relaxed_min_score": 0.89,
+    "safe_auto_rename_prefixes": [
+      "luaD_",
+      "luaZ_",
+      "luaV_finish",
+      "luaopen_"
+    ]
   }
 }

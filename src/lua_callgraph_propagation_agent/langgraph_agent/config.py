@@ -16,6 +16,28 @@ def load_config(path: str | Path) -> dict[str, Any]:
         return json.load(f)
 
 
+def resolve_target_lua_version(config: dict[str, Any]) -> str:
+    paths = resolve_paths(config)
+    return str(
+        paths.get("target_lua_version")
+        or paths.get("lua_version")
+        or config.get("analysis", {}).get("lua_version")
+        or config.get("extraction", {}).get("lua_version")
+        or "Lua_547"
+    )
+
+
+def resolve_target_architecture(config: dict[str, Any]) -> str:
+    paths = resolve_paths(config)
+    return str(
+        paths.get("target_architecture")
+        or paths.get("architecture")
+        or config.get("analysis", {}).get("architecture")
+        or config.get("extraction", {}).get("architecture")
+        or "x86_64"
+    )
+
+
 def resolve_paths(config: dict[str, Any]) -> dict[str, Any]:
     if "session_name" in config and ("extraction" in config or "analysis" in config):
         return _paths_new(config)

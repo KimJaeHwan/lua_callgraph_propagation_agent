@@ -59,7 +59,8 @@ class LocalLlmReasoner:
                 or top.get("retrieval_prior")
                 or 0.0
             )
-            if score and score < cfg.decompile_min_score:
+            deferred_min_score = max(0.0, cfg.decompile_min_score - cfg.deferred_min_score_relaxation)
+            if score and score < deferred_min_score:
                 continue
             predicted = (
                 case.get("predicted")
@@ -74,7 +75,7 @@ class LocalLlmReasoner:
             margin = float(case.get("score_margin_top1_top2") or 0.0)
             anchor_counts = case.get("anchor_counts") or {}
             total_anchor_edges = int(anchor_counts.get("total") or 0)
-            if margin == 0.0 and total_anchor_edges == 0 and score < max(cfg.decompile_min_score, 0.90):
+            if margin == 0.0 and total_anchor_edges == 0 and score < max(cfg.decompile_min_score, cfg.deferred_no_graph_min_score):
                 continue
             selected.append(case)
         selected.sort(
@@ -161,7 +162,7 @@ class LocalLlmReasoner:
             candidate_name=candidate,
             confidence=confidence,
             accepted=accepted,
-            rename_in_ida=bool(accepted and graph_config.allow_auto_rename and confidence >= 0.92),
+            rename_in_ida=bool(accepted and graph_config.allow_auto_rename and _should_auto_rename(candidate, confidence, graph_config)),
             reason="; ".join(support) if accepted else "not enough non-contradictory evidence",
             evidence=support,
             contradictions=contradictions,
@@ -201,7 +202,7 @@ def build_verification_prompt(
             "prefer_deferred_over_guess": graph_config.prefer_deferred_over_guess,
             # Keep the model's acceptance threshold aligned with coerce_decision().
             "minimum_confidence_for_accept": graph_config.decompile_min_score,
-            "minimum_confidence_for_rename": graph_config.trusted_min_score,
+            "minimum_confidence_for_rename": graph_config.rename_min_score,
             "never_accept_if_blacklisted": True,
             "graph_evidence_is_a_prior_not_a_hard_requirement": True,
             "accept_when_ida_semantics_support_the_candidate_even_if_graph_anchors_are_sparse": True,
@@ -215,6 +216,18 @@ def build_verification_prompt(
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _has_safe_auto_rename_prefix(candidate_name: str, graph_config: GraphConfig) -> bool:
+    return any(candidate_name.startswith(prefix) for prefix in graph_config.safe_auto_rename_prefixes)
+
+
+def _should_auto_rename(candidate_name: str, confidence: float, graph_config: GraphConfig) -> bool:
+    if confidence >= graph_config.rename_min_score:
+        return True
+    if confidence >= graph_config.rename_relaxed_min_score and _has_safe_auto_rename_prefix(candidate_name, graph_config):
+        return True
+    return False
+
+
 def coerce_decision(raw: dict[str, Any], context: CandidateContext, graph_config: GraphConfig) -> VerificationDecision:
     candidate_name = str(raw.get("candidate_name") or context.predicted_name)
     confidence = float(raw.get("confidence") or 0.0)
@@ -224,7 +237,7 @@ def coerce_decision(raw: dict[str, Any], context: CandidateContext, graph_config
         accepted = False
     rename_requested = raw.get("rename_in_ida")
     if rename_requested is None:
-        rename_requested = accepted and confidence >= graph_config.trusted_min_score
+        rename_requested = accepted and _should_auto_rename(candidate_name, confidence, graph_config)
     return VerificationDecision(
         case_id=str(raw.get("case_id") or context.case_id),
         query_func=str(raw.get("query_func") or context.query_func),

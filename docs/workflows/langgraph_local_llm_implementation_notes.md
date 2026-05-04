@@ -29,6 +29,9 @@
 
 ## 3. GraphConfig 권장값
 
+현재 구현에서는 seed / targeted / deferred / rename 관련 임계값을 `GraphConfig` 한군데에서 관리한다.  
+실행 시에는 runtime config의 `graph_config` 블록으로 override 할 수 있고, CLI는 실행 제어용 값만 덮어쓴다.
+
 | 필드 | 권장값 | 설명 |
 |---|---:|---|
 | `max_rounds` | 20 | 전체 자동화 최대 반복 |
@@ -36,12 +39,22 @@
 | `min_delta_accepted` | 5 | 이보다 적게 늘면 수렴 후보 |
 | `suspicious_threshold` | 5 | many-to-one 의심 기준 |
 | `auto_blacklist_threshold` | 10 | 자동 blacklist 추가 기준 |
+| `seed_min_top1_score` | 0.92 | 일반 retrieval seed 최소 점수 |
+| `seed_min_margin` | 0.05 | 일반 retrieval seed 최소 margin |
+| `seed_dedup_max_per_ref` | 1 | 같은 reference 이름에 허용할 최대 query 수 |
+| `targeted_min_score` | 0.74 | targeted retrieval anchor 최소 점수 |
+| `targeted_min_margin` | 0.15 | targeted retrieval anchor 최소 margin |
 | `trusted_min_score` | 0.92 | trusted 자동 검증 queue 최소 점수 |
 | `decompile_min_score` | 0.85 | deferred decompile 검토 최소 점수 |
+| `deferred_min_score_relaxation` | 0.05 | deferred 검토 시 score 완화 폭 |
+| `deferred_no_graph_min_score` | 0.90 | graph 근거가 약할 때 필요한 최소 점수 |
 | `max_ida_cases_per_round` | 10 | round당 IDA 검토 상한 |
 | `fresh_retrieval_anchor_delta` | 20 | 새 anchor가 이 이상이면 fresh retrieval 고려 |
 | `allow_auto_rename` | false 기본 | 보고/검증 모드에서는 rename 비활성 권장 |
 | `allow_fresh_retrieval` | true | patched feature 기반 embedding retrieval 허용 |
+| `rename_min_score` | 0.92 | 일반 auto rename 최소 점수 |
+| `rename_relaxed_min_score` | 0.89~0.90 | 안전 prefix 함수용 완화 rename 점수 |
+| `safe_auto_rename_prefixes` | `luaD_`, `luaZ_`, `luaV_finish`, `luaopen_` | 완화 rename 허용 prefix |
 
 ## 4. 정확한 호출 순서
 
@@ -218,6 +231,8 @@ else:
 현재 구현 기준으로는 아래 보완이 이미 들어가 있다.
 
 - deferred triage는 `show_candidate_context`를 기본 컨텍스트 번들로 사용한다.
+- legacy runtime config에서는 `analysis/extraction.lua_version`이 없어도 `paths.target_lua_version`을 읽어 `build_suite` / `targeted_retrieval`에 전달한다.
+- `graph_config`는 runtime config에서 직접 관리 가능하며, threshold 실험은 이 블록만 수정하는 것을 권장한다.
 - `current_top_prediction` 및 `score_margin_top1_top2`를 Local LLM 입력에 반영한다.
 - `case_id`의 `@entry_point` suffix에서 entry point를 정규화한다.
 - `read_propagation_summary`를 metrics 단계에 다시 연결한다.

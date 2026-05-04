@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .clients import IdaMcpClient, LuaMcpClient
-from .config import load_config, resolve_paths
+from .config import load_config, resolve_paths, resolve_target_architecture, resolve_target_lua_version
 from .confirmed import ConfirmedMapBuilder
 from .reasoner import LocalLlmReasoner
 from .state import (
@@ -33,7 +33,12 @@ class LangGraphAgentNodes:
         config_path = state["config_path"]
         config = load_config(config_path)
         runtime_paths = RuntimePaths.from_resolved_paths(resolve_paths(config))
-        graph_config = GraphConfig(**state.get("graph_config", {}))
+        config_graph = (
+            config.get("graph_config")
+            or config.get("agent", {}).get("graph_config")
+            or {}
+        )
+        graph_config = GraphConfig(**{**config_graph, **state.get("graph_config", {})})
         return {
             **state,
             "paths": runtime_paths.to_dict(),
@@ -49,8 +54,8 @@ class LangGraphAgentNodes:
         session_name = config.get("session_name", "runtime_session")
         result = self.lua.extract_query_features(
             binary=extraction.get("binary", ""),
-            lua_version=extraction.get("lua_version", config.get("analysis", {}).get("lua_version", "Lua_547")),
-            architecture=extraction.get("architecture", config.get("analysis", {}).get("architecture", "x86_64")),
+            lua_version=extraction.get("lua_version", resolve_target_lua_version(config)),
+            architecture=extraction.get("architecture", resolve_target_architecture(config)),
             session_name=session_name,
             opt_level=extraction.get("opt_level", "O2"),
             strip_mode=extraction.get("strip_mode", "stripped"),
@@ -84,27 +89,28 @@ class LangGraphAgentNodes:
 
     def select_seed(self, state: AgentState, *, include_targeted: bool = False) -> AgentState:
         paths = state["paths"]
-        config = load_config(state["config_path"])
-        seed_cfg = config.get("analysis", {}).get("seed_anchors", {})
+        cfg = GraphConfig(**state.get("graph_config", {}))
         kwargs: dict[str, Any] = {
             "retrieval_json": paths["retrieval_json"],
             "output_json": paths["seed_anchor_json"],
             "query_json": self._query_json_or_manifest_feature(paths),
             "reference_db": paths["reference_db"],
-            "min_top1_score": float(seed_cfg.get("min_top1_score", 0.92)),
-            "min_margin": float(seed_cfg.get("min_margin", 0.05)),
-            "dedup_max_per_ref": int(seed_cfg.get("dedup_max_per_ref", 1)),
+            "min_top1_score": float(cfg.seed_min_top1_score),
+            "min_margin": float(cfg.seed_min_margin),
+            "dedup_max_per_ref": int(cfg.seed_dedup_max_per_ref),
             "scope_json": paths.get("lua_scope_json") or None,
         }
         if include_targeted and paths.get("targeted_json"):
             kwargs["targeted_json"] = paths["targeted_json"]
+            kwargs["targeted_min_score"] = float(cfg.targeted_min_score)
+            kwargs["targeted_min_margin"] = float(cfg.targeted_min_margin)
         result = self.lua.select_seed_anchors(**kwargs)
         return self._record_tool_result(state, result, phase="seed_selected")
 
     def build_suite(self, state: AgentState) -> AgentState:
         paths = state["paths"]
         config = load_config(state["config_path"])
-        lua_version = config.get("analysis", {}).get("lua_version") or config.get("extraction", {}).get("lua_version") or "Lua_547"
+        lua_version = resolve_target_lua_version(config)
         result = self.lua.build_runtime_suite(
             retrieval_json=paths["retrieval_json"],
             anchor_json=paths["seed_anchor_json"],
@@ -236,7 +242,16 @@ class LangGraphAgentNodes:
                 continue
             seen_entries.add(normalized_entry)
             queue.append(item)
-        return {**state, "verification_queue": queue[: cfg.max_ida_cases_per_round], "phase": "verification_planned"}
+        # Once a trusted/deferred batch is promoted into the verification queue,
+        # treat it as consumed so metrics/finalize logic does not keep seeing the
+        # same batch as pending work forever.
+        return {
+            **state,
+            "pending_trusted": [],
+            "pending_deferred": [],
+            "verification_queue": queue[: cfg.max_ida_cases_per_round],
+            "phase": "verification_planned",
+        }
 
     def collect_ida_evidence(self, state: AgentState) -> AgentState:
         queue = state.get("verification_queue", [])
@@ -463,7 +478,7 @@ class LangGraphAgentNodes:
     def targeted_retrieval(self, state: AgentState) -> AgentState:
         paths = state["paths"]
         config = load_config(state["config_path"])
-        lua_version = config.get("analysis", {}).get("lua_version") or config.get("extraction", {}).get("lua_version") or "Lua_547"
+        lua_version = resolve_target_lua_version(config)
         result = self.lua.targeted_retrieval(
             query_json=paths.get("patched_query_json") or self._query_json_or_manifest_feature(paths),
             anchors_json=paths["seed_anchor_json"],

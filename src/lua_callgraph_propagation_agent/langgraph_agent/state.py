@@ -57,14 +57,26 @@ class GraphConfig:
     min_delta_accepted: int = 5
     suspicious_threshold: int = 5
     auto_blacklist_threshold: int = 10
+    seed_min_top1_score: float = 0.92
+    seed_min_margin: float = 0.05
+    seed_dedup_max_per_ref: int = 1
+    targeted_min_score: float = 0.75
+    targeted_min_margin: float = 0.15
     trusted_min_score: float = 0.92
     decompile_min_score: float = 0.85
+    deferred_min_score_relaxation: float = 0.05
+    deferred_no_graph_min_score: float = 0.90
     max_ida_cases_per_round: int = 10
     fresh_retrieval_anchor_delta: int = 20
     allow_auto_rename: bool = True
     allow_fresh_retrieval: bool = True
     prefer_deferred_over_guess: bool = True
     max_tool_failures: int = 3
+    rename_min_score: float = 0.92
+    rename_relaxed_min_score: float = 0.90
+    safe_auto_rename_prefixes: list[str] = field(
+        default_factory=lambda: ["luaD_", "luaZ_", "luaV_finish", "luaopen_"]
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

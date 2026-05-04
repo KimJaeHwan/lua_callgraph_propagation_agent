@@ -81,6 +81,9 @@ def route_after_patch(state: AgentState) -> Route:
 
 def route_after_metrics(state: AgentState) -> Route:
     cfg = GraphConfig(**state.get("graph_config", {}))
+    # Keep working while we still have unreviewed high-confidence candidates.
+    if state.get("pending_trusted") or state.get("pending_deferred") or state.get("verification_queue"):
+        return "analyze_distribution"
     if int(state.get("round_index") or 0) >= cfg.max_rounds:
         return "finalize"
     if int(state.get("convergence_count") or 0) >= cfg.convergence_patience:
