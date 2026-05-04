@@ -38,23 +38,50 @@
 
 GitHub Release나 별도 배포 패키지에는 아래를 같이 올리는 것이 좋다.
 
-- `data/inputs/retrieval_indexes/Lua_547/x86_64/runtime/`
-- `data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite`
-- 필요하면 `data/inputs/reference_features/Lua_547/`
+- `data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime/`
+- `data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite`
+- 필요하면 `data/inputs/reference_features/<Lua_version>/`
 - 샘플 binary 또는 테스트용 pre-extracted query JSON
 
-권장 패키지 예:
+현재 공개된 `v0.1.0` release에는 아래 조합의 runtime asset archive와 대응하는 `.sha256` 파일이 포함되어 있다.
+
+- `Lua_524 / aarch64`
+- `Lua_524 / x86_64`
+- `Lua_536 / aarch64`
+- `Lua_536 / x86_64`
+- `Lua_547 / aarch64`
+- `Lua_547 / x86_64`
+
+권장 패키지 구조 예:
 
 ```text
 lua_callgraph_runtime_assets/
   callgraphs/
+    Lua_524/
+      reference_callgraph.sqlite
+    Lua_536/
+      reference_callgraph.sqlite
     Lua_547/
       reference_callgraph.sqlite
   retrieval_indexes/
+    Lua_524/
+      aarch64/
+        runtime/
+      x86_64/
+        runtime/
+    Lua_536/
+      aarch64/
+        runtime/
+      x86_64/
+        runtime/
     Lua_547/
+      aarch64/
+        runtime/
       x86_64/
         runtime/
 ```
+
+압축을 푼 뒤에는 내용물이 레포의 `data/inputs/` 아래로 그대로 복사되도록 맞추는 것이 가장 안전하다.
 
 ## 4. 코드 외 환경 준비물
 
@@ -94,6 +121,10 @@ binary extraction까지 포함한 실행:
   --config data/configs/runtime_recommended_binary.json \
   --stop-on-error
 ```
+
+LangGraph + Local LLM 경로를 사용할 때도 release asset 구성은 동일하며, 실행 정책 임계값은
+`runtime_recommended_binary.json` 또는 runtime 결과 디렉터리의 `runtime_config.json` 안
+`graph_config` 블록에서 파일 기반으로 관리한다.
 
 ## 6. 현재 상태 요약
 
