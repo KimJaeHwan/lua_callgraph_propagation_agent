@@ -14,10 +14,6 @@
     "query_features_root": "data/runtime/query_features",
     "extractor_work_root": "data/runtime/extractor_workspace"
   },
-  "tooling": {
-    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
-    "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite"
-  },
   "analysis": {
     "retrieval": {
       "candidate_pool": 100,

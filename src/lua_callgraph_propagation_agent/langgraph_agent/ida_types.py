@@ -10,7 +10,7 @@ from .signature_db import lookup_signature_record
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_IDA_TYPE_ROOT = REPO_ROOT / "data" / "inputs" / "ida_types"
-DEFAULT_VANILLA_SOURCE_ROOT = REPO_ROOT.parent / "lua_custom_engine_generator" / "lua_source_vanilla"
+DEFAULT_VANILLA_SOURCE_ROOT = REPO_ROOT / "data" / "inputs" / "lua_source_vanilla"
 DEFAULT_TYPE_MODE = "vanilla_headers"
 
 VERSION_DIR = {

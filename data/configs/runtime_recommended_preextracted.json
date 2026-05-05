@@ -10,10 +10,6 @@
   "runtime": {
     "results_root": "data/runtime/results"
   },
-  "tooling": {
-    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
-    "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite"
-  },
   "analysis": {
     "retrieval": {
       "candidate_pool": 100,

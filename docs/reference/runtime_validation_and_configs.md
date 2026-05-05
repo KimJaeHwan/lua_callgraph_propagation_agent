@@ -35,10 +35,6 @@
     "results_root": "data/runtime/results",
     "query_features_root": "data/runtime/query_features"
   },
-  "tooling": {
-    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
-    "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite"
-  },
   "analysis": { ... },
   "graph_config": { ... },
   "managed_paths": { ... }
@@ -75,11 +71,14 @@
 
 ### `tooling`
 
-- `vanilla_lua_source_root`
-  - 버전별 바닐라 Lua 헤더/소스 루트
-  - IDA 타입 주입과 시그니처 DB 재생성에 필요
-- `ida_signature_db`
-  - SQLite 시그니처 DB
+보통 추천 config에서는 생략해도 된다.
+
+- 기본 바닐라 Lua source root
+  - `data/inputs/lua_source_vanilla`
+- 기본 시그니처 DB
+  - `data/inputs/ida_types/lua_function_signatures.sqlite`
+
+즉 다른 위치를 쓰고 싶을 때만 override 용도로 넣으면 된다.
 
 ### `graph_config`
 
@@ -125,7 +124,6 @@ data/runtime/query_features/<feature_namespace>/extract_manifest.json
   - `graph_config`
 - 보통 유지:
   - `runtime`
-  - `tooling`
   - `managed_paths`
 
 즉 더 이상 `paths` 안에 결과 파일 위치를 전부 손으로 적을 필요가 없다.
@@ -153,8 +151,7 @@ data/runtime/query_features/<feature_namespace>/extract_manifest.json
 - IDA function signature DB
   - `data/inputs/ida_types/lua_function_signatures.sqlite`
 - 바닐라 Lua source tree
-  - `../lua_custom_engine_generator/lua_source_vanilla`
-  - 또는 config의 `tooling.vanilla_lua_source_root`가 가리키는 위치
+  - `data/inputs/lua_source_vanilla`
 
 ### binary extraction까지 할 경우 추가
 

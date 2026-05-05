@@ -41,7 +41,7 @@ Lua 5.2 / 5.3 / 5.4 계열은 내부 struct layout, 함수 signature, helper 정
 예시:
 
 ```text
-lua_custom_engine_generator/lua_source_vanilla/
+data/inputs/lua_source_vanilla/
   lua-5.2.4/src/
   lua-5.3.6/src/
   lua-5.4.7/src/
@@ -136,9 +136,6 @@ plan_ida_verification
 
 ```json
 {
-  "paths": {
-    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla"
-  },
   "graph_config": {
     "enable_ida_type_injection": true,
     "ida_type_injection_mode": "vanilla_headers"
@@ -148,8 +145,6 @@ plan_ida_verification
 
 의미:
 
-- `vanilla_lua_source_root`
-  - 버전별 바닐라 Lua 소스 루트
 - `enable_ida_type_injection`
   - 타입 주입 기능 on/off
 - `ida_type_injection_mode`

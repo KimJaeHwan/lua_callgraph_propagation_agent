@@ -16,7 +16,6 @@
   "session_name": "...",
   "user_input": { ... },
   "runtime": { ... },
-  "tooling": { ... },
   "analysis": { ... },
   "graph_config": { ... },
   "managed_paths": { ... }
@@ -31,8 +30,6 @@
   - 사용자가 직접 바꾸는 핵심 입력
 - `runtime`
   - 결과/중간산출물 루트 같은 실행 루트 설정
-- `tooling`
-  - 타입 주입, 시그니처 DB, 바닐라 소스 위치
 - `analysis`
   - retrieval / seed / propagation 단계 설정
 - `graph_config`
@@ -82,10 +79,14 @@
 
 ## 4. `tooling`
 
-- `vanilla_lua_source_root`
-  - 버전별 바닐라 Lua 소스 루트
-- `ida_signature_db`
-  - Lua 함수 시그니처 SQLite DB
+고급 override 블록이다.
+
+보통은 config에 아예 안 적어도 된다.
+
+- 기본 바닐라 Lua 소스 루트
+  - `data/inputs/lua_source_vanilla`
+- 기본 시그니처 DB
+  - `data/inputs/ida_types/lua_function_signatures.sqlite`
 
 ## 5. `analysis`
 

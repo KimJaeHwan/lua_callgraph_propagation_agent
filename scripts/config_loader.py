@@ -234,7 +234,7 @@ def _build_defaults(
         "reference_feature_root": "data/inputs/reference_features",
         "reference_db": f"data/inputs/callgraphs/{lua_version}/reference_callgraph.sqlite",
         "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite",
-        "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
+        "vanilla_lua_source_root": "data/inputs/lua_source_vanilla",
         "manual_force_anchors_json": f"{result_root}/manual_force_anchors.json",
         "embedding_project_root": ".",
         "propagation_suite": "",

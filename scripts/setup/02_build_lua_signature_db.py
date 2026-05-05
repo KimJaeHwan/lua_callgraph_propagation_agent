@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--vanilla-root",
         type=Path,
-        default=(PROJECT_ROOT.parent / "lua_custom_engine_generator" / "lua_source_vanilla"),
+        default=(PROJECT_ROOT / "data" / "inputs" / "lua_source_vanilla"),
         help="Versioned vanilla Lua source root.",
     )
     parser.add_argument(

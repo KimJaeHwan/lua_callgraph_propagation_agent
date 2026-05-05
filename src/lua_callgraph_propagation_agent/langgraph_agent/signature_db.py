@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SIGNATURE_DB_PATH = REPO_ROOT / "data" / "inputs" / "ida_types" / "lua_function_signatures.sqlite"
-DEFAULT_VANILLA_SOURCE_ROOT = REPO_ROOT.parent / "lua_custom_engine_generator" / "lua_source_vanilla"
+DEFAULT_VANILLA_SOURCE_ROOT = REPO_ROOT / "data" / "inputs" / "lua_source_vanilla"
 
 VANILLA_SRC_DIR = {
     "Lua_524": DEFAULT_VANILLA_SOURCE_ROOT / "lua-5.2.4" / "src",

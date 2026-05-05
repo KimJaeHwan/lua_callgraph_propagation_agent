@@ -53,7 +53,7 @@ class RuntimePaths:
                 paths.get("ida_signature_db") or "data/inputs/ida_types/lua_function_signatures.sqlite"
             ),
             vanilla_lua_source_root=str(
-                paths.get("vanilla_lua_source_root") or "../lua_custom_engine_generator/lua_source_vanilla"
+                paths.get("vanilla_lua_source_root") or "data/inputs/lua_source_vanilla"
             ),
             manual_force_anchors_json=str(
                 paths.get("manual_force_anchors_json") or result_dir / "manual_force_anchors.json"

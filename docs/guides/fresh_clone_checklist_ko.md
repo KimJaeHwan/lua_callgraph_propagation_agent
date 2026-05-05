@@ -49,10 +49,10 @@ data/inputs/ida_types/lua_function_signatures.sqlite
 기본 기대 경로:
 
 ```text
-../lua_custom_engine_generator/lua_source_vanilla
+data/inputs/lua_source_vanilla
 ```
 
-다른 위치에 있다면 config의 `tooling.vanilla_lua_source_root`를 바꾸면 된다.
+기본 배포 상태에서는 repo 내부 경로만으로 동작하도록 맞춰져 있다.
 
 ## 3. 실행 모드별 추가 확인
 
