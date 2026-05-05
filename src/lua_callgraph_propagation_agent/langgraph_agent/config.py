@@ -64,6 +64,7 @@ def _build_defaults(session: str, lua_version: str, architecture: str) -> dict[s
         "propagation_output_json": f"{result_root}/propagation_result.json",
         "deferred_output_json": f"{result_root}/deferred_analysis.json",
         "final_report_json": f"{result_root}/final_mapping_report.json",
+        "manual_force_anchors_json": f"{result_root}/manual_force_anchors.json",
     }
 
 

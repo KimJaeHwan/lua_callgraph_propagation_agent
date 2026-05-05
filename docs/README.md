@@ -7,6 +7,7 @@
 - [guides/mcp_quickstart_guide.md](guides/mcp_quickstart_guide.md): MCP를 처음 사용하는 사람용 시작 문서
 - [guides/extraction_runtime_environment.md](guides/extraction_runtime_environment.md): Ghidra / pyghidra 환경 설정
 - [guides/macos_mps_setup.md](guides/macos_mps_setup.md): Apple Silicon MPS 설정
+- [guides/manual_force_anchor_workflow_ko.md](guides/manual_force_anchor_workflow_ko.md): 22번 runner 중심의 manual force anchor 운영 흐름
 - [guides/release_assets.md](guides/release_assets.md): 릴리스 자산과 배포 메모
 
 ## workflows
@@ -31,6 +32,7 @@
 - [architecture/callgraph_propagation_agent_design.md](architecture/callgraph_propagation_agent_design.md): propagation 설계 배경
 - [architecture/callgraph_store_design.md](architecture/callgraph_store_design.md): callgraph 저장 구조 설계
 - [architecture/langgraph_agent_plan.md](architecture/langgraph_agent_plan.md): LangGraph agent 설계
+- [architecture/ida_lua_header_injection_plan.md](architecture/ida_lua_header_injection_plan.md): IDA에 Lua 바닐라 헤더와 타입 정보를 주입하는 계획
 - [architecture/retrieval_performance_plan.md](architecture/retrieval_performance_plan.md): retrieval 성능 계획
 
 ## reference

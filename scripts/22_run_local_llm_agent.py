@@ -248,6 +248,8 @@ def _log_state_after(route: str, state: dict[str, Any]) -> None:
 def run_manual_orchestrator(nodes: LangGraphAgentNodes, state: dict[str, Any]) -> dict[str, Any]:
     state = nodes.init_state(state)
     route = route_after_init(state)
+    if route not in {"run_extraction", "detect_scope"}:
+        print(f"[agent] auto-resume detected -> starting from {route}", flush=True)
     if route == "run_extraction" and not state.get("allow_extraction", False):
         raise RuntimeError(
             "Runner resolved to run_extraction, but extraction is disabled. "

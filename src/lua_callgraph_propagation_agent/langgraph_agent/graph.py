@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from typing import Literal
 
 from .nodes import LangGraphAgentNodes
@@ -36,8 +37,46 @@ Route = Literal[
 
 def route_after_init(state: AgentState) -> Route:
     paths = state.get("paths", {})
-    query_json = paths.get("query_json")
-    return "detect_scope" if query_json else "run_extraction"
+    query_json = str(paths.get("query_json") or "")
+    if not query_json:
+        return "run_extraction"
+
+    final_report = _existing_path(paths.get("final_report_json"))
+    propagation = _existing_path(paths.get("propagation_json"))
+    deferred = _existing_path(paths.get("deferred_json"))
+    suite = _existing_path(paths.get("suite_json"))
+    seed = _existing_path(paths.get("seed_anchor_json"))
+    retrieval = _existing_path(paths.get("retrieval_json"))
+    scope = _existing_path(paths.get("lua_scope_json"))
+    manual_force = _existing_path(paths.get("manual_force_anchors_json"))
+
+    if manual_force and retrieval and seed:
+        manual_newer_than_seed = seed.stat().st_mtime < manual_force.stat().st_mtime
+        manual_newer_than_final = final_report is None or final_report.stat().st_mtime < manual_force.stat().st_mtime
+        if manual_newer_than_seed or manual_newer_than_final:
+            return "build_suite"
+
+    if final_report and propagation:
+        return "update_metrics"
+    if suite and seed and retrieval:
+        return "run_downstream"
+    if seed and retrieval:
+        return "build_suite"
+    if retrieval:
+        return "select_seed"
+    if scope:
+        return "run_bulk_retrieval"
+    return "detect_scope"
+
+
+def _existing_path(value: str | None) -> Path | None:
+    path = str(value or "").strip()
+    if not path:
+        return None
+    candidate = Path(path)
+    if candidate.exists():
+        return candidate
+    return None
 
 
 def route_after_distribution(state: AgentState) -> Route:

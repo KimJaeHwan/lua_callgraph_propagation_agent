@@ -52,11 +52,18 @@
     "max_tool_failures": 3,
     "rename_min_score": 0.92,
     "rename_relaxed_min_score": 0.89,
+    "enable_ida_type_injection": true,
+    "ida_type_injection_mode": "vanilla_headers",
     "safe_auto_rename_prefixes": [
       "luaD_",
       "luaZ_",
       "luaV_finish",
       "luaopen_"
     ]
+  },
+  "paths": {
+    "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite",
+    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
+    "manual_force_anchors_json": "data/runtime/results/<session_name>/manual_force_anchors.json"
   }
 }

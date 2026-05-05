@@ -26,6 +26,10 @@ class RuntimePaths:
     targeted_json: str = ""
     reference_db: str = ""
     retrieval_index: str = ""
+    ida_type_root: str = ""
+    ida_signature_db: str = ""
+    vanilla_lua_source_root: str = ""
+    manual_force_anchors_json: str = ""
 
     @classmethod
     def from_resolved_paths(cls, paths: dict[str, Any]) -> "RuntimePaths":
@@ -44,6 +48,16 @@ class RuntimePaths:
             targeted_json=str(result_dir / "targeted_retrieval.json") if str(result_dir) != "." else "",
             reference_db=str(paths.get("reference_db") or ""),
             retrieval_index=str(paths.get("retrieval_index") or ""),
+            ida_type_root=str(paths.get("ida_type_root") or "data/inputs/ida_types"),
+            ida_signature_db=str(
+                paths.get("ida_signature_db") or "data/inputs/ida_types/lua_function_signatures.sqlite"
+            ),
+            vanilla_lua_source_root=str(
+                paths.get("vanilla_lua_source_root") or "../lua_custom_engine_generator/lua_source_vanilla"
+            ),
+            manual_force_anchors_json=str(
+                paths.get("manual_force_anchors_json") or result_dir / "manual_force_anchors.json"
+            ) if str(result_dir) != "." else str(paths.get("manual_force_anchors_json") or ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -74,6 +88,8 @@ class GraphConfig:
     max_tool_failures: int = 3
     rename_min_score: float = 0.92
     rename_relaxed_min_score: float = 0.90
+    enable_ida_type_injection: bool = True
+    ida_type_injection_mode: str = "vanilla_headers"
     safe_auto_rename_prefixes: list[str] = field(
         default_factory=lambda: ["luaD_", "luaZ_", "luaV_finish", "luaopen_"]
     )

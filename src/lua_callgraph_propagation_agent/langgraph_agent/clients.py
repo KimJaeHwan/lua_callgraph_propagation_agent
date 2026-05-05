@@ -314,3 +314,28 @@ class CodexIdaMcpClient:
         if not result.ok:
             return result
         return ToolResult.success("rename_function", result.result, {"entry_point": entry_point, "new_name": new_name})
+
+    def declare_types(self, decls: str | list[str]) -> ToolResult:
+        result = self.base.call_tool("declare_type", {"decls": decls})
+        if not result.ok:
+            return result
+        count = len(decls) if isinstance(decls, list) else 1
+        return ToolResult.success("declare_type", result.result, {"decls": f"<omitted:{count}>"})
+
+    def inspect_type(self, type_name: str) -> ToolResult:
+        result = self.base.call_tool(
+            "type_inspect",
+            {"queries": [{"name": type_name, "include_members": False, "max_members": 0}]},
+        )
+        if not result.ok:
+            return result
+        return ToolResult.success("type_inspect", result.result, {"type_name": type_name})
+
+    def set_function_signature(self, entry_point: str, signature: str) -> ToolResult:
+        result = self.base.call_tool(
+            "set_type",
+            {"edits": [{"addr": _ida_addr(entry_point), "signature": signature}]},
+        )
+        if not result.ok:
+            return result
+        return ToolResult.success("set_type", result.result, {"entry_point": entry_point, "signature": signature})

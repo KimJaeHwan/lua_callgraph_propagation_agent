@@ -9,6 +9,8 @@ from typing import Any
 from .clients import IdaMcpClient, LuaMcpClient
 from .config import load_config, resolve_paths, resolve_target_architecture, resolve_target_lua_version
 from .confirmed import ConfirmedMapBuilder
+from .ida_types import available_type_pack, build_function_signature, load_type_declarations
+from .manual_force_anchors import apply_manual_force_anchors, apply_manual_force_anchor_ida_updates
 from .reasoner import LocalLlmReasoner
 from .state import (
     AgentState,
@@ -108,6 +110,8 @@ class LangGraphAgentNodes:
         return self._record_tool_result(state, result, phase="seed_selected")
 
     def build_suite(self, state: AgentState) -> AgentState:
+        paths = state["paths"]
+        state = self._apply_manual_force_anchors(state)
         paths = state["paths"]
         config = load_config(state["config_path"])
         lua_version = resolve_target_lua_version(config)
@@ -349,11 +353,26 @@ class LangGraphAgentNodes:
                 "phase": "ida_boundary_mismatch",
             }
 
+        config = load_config(state["config_path"])
+        cfg = GraphConfig(**state.get("graph_config", {}))
+        type_errors: list[str] = []
+        current_name_for_types = str(resolved_fn.get("name") or "")
+        if cfg.enable_ida_type_injection:
+            type_state = self._apply_known_signature(
+                state,
+                entry_point=resolved_entry,
+                candidate_name=context.predicted_name,
+                current_name=current_name_for_types or f"sub_{resolved_entry.upper()}",
+            )
+            type_errors.extend(type_state["errors"])
+            state = {**state, "ida_types_loaded_version": type_state["loaded_version"]}
+
         # Keep IDA verification light: resolve the function once, then reuse a single
         # analyze_function payload instead of separate xref/decompile/string round-trips.
         analysis = self.ida.inspect_strings(resolved_entry)
         if not analysis.ok:
             errors.append(f"{analysis.tool_name}: {analysis.error}")
+        errors.extend(type_errors)
         evidence = IdaEvidence(
             entry_point=resolved_entry,
             current_name=str(analysis.result.get("name") or resolved_fn.get("name") or ""),
@@ -369,6 +388,7 @@ class LangGraphAgentNodes:
             **state,
             "ida_resolution_cache": resolution_cache,
             "ida_seen_functions": sorted(seen_functions),
+            "ida_types_loaded_version": state.get("ida_types_loaded_version", ""),
             "verification_queue": remaining_queue,
             "current_candidate_context": context.to_dict(),
             "current_ida_evidence": evidence.to_dict(),
@@ -432,8 +452,137 @@ class LangGraphAgentNodes:
         decision = VerificationDecision(**state.get("current_decision", {}))
         if decision.accepted and decision.rename_in_ida:
             result = self.ida.rename_function(decision.entry_point, decision.candidate_name)
-            return self._record_tool_result(state, result, phase="ida_renamed")
+            updated = self._record_tool_result(state, result, phase="ida_renamed")
+            if result.ok:
+                cfg = GraphConfig(**state.get("graph_config", {}))
+                if cfg.enable_ida_type_injection:
+                    type_state = self._apply_known_signature(
+                        updated,
+                        entry_point=decision.entry_point,
+                        candidate_name=decision.candidate_name,
+                        current_name=decision.candidate_name,
+                    )
+                    updated = {
+                        **updated,
+                        "ida_types_loaded_version": type_state["loaded_version"],
+                    }
+                    if type_state["errors"]:
+                        failures = list(updated.get("tool_failures", []))
+                        failures.extend(
+                            {"tool_name": "set_type", "error": err, "ok": False}
+                            for err in type_state["errors"]
+                        )
+                        updated = {**updated, "tool_failures": failures, "phase": "ida_renamed_type_partial"}
+                    else:
+                        updated = {**updated, "phase": "ida_renamed_typed"}
+            return updated
         return {**state, "phase": "ida_rename_skipped"}
+
+    def _apply_known_signature(
+        self,
+        state: AgentState,
+        *,
+        entry_point: str,
+        candidate_name: str,
+        current_name: str,
+    ) -> dict[str, Any]:
+        if self.ida is None:
+            return {"loaded_version": state.get("ida_types_loaded_version", ""), "errors": ["ida_unavailable"]}
+        config = load_config(state["config_path"])
+        cfg = GraphConfig(**state.get("graph_config", {}))
+        if not cfg.enable_ida_type_injection:
+            return {"loaded_version": state.get("ida_types_loaded_version", ""), "errors": []}
+        lua_version = resolve_target_lua_version(config)
+        type_root = str(state["paths"].get("ida_type_root") or "")
+        signature_db = str(state["paths"].get("ida_signature_db") or "")
+        type_mode = str(cfg.ida_type_injection_mode or "vanilla_headers")
+        vanilla_source_root = str(state["paths"].get("vanilla_lua_source_root") or "")
+        loaded_version = str(state.get("ida_types_loaded_version") or "")
+        errors: list[str] = []
+        if not available_type_pack(
+            lua_version,
+            type_root,
+            mode=type_mode,
+            vanilla_source_root=vanilla_source_root,
+        ):
+            return {"loaded_version": loaded_version, "errors": [f"ida_type_pack_missing:{lua_version}:{type_mode}"]}
+        if loaded_version != lua_version:
+            declare_result = self.ida.declare_types(
+                load_type_declarations(
+                    lua_version,
+                    type_root,
+                    mode=type_mode,
+                    vanilla_source_root=vanilla_source_root,
+                )
+            )
+            if declare_result.ok:
+                inspect_result = self.ida.inspect_type("lua_State")
+                if not inspect_result.ok:
+                    errors.append(f"ida_type_inspect_failed:{lua_version}:{inspect_result.error}")
+            else:
+                errors.append(f"ida_type_declare_failed:{lua_version}:{type_mode}:{declare_result.error}")
+        signature = build_function_signature(
+            lua_version,
+            current_name,
+            candidate_name,
+            configured_db_path=signature_db,
+            vanilla_source_root=vanilla_source_root,
+        )
+        if signature:
+            set_type_result = self.ida.set_function_signature(entry_point, signature)
+            if not set_type_result.ok:
+                errors.append(f"ida_set_type_failed:{candidate_name}:{set_type_result.error}")
+        return {
+            "loaded_version": lua_version if not errors or all(err.startswith("ida_set_type_failed:") for err in errors) else loaded_version,
+            "errors": errors,
+        }
+
+    def _apply_manual_force_anchors(self, state: AgentState) -> AgentState:
+        paths = state["paths"]
+        summary = apply_manual_force_anchors(
+            seed_anchor_json=paths["seed_anchor_json"],
+            query_json=self._query_json_or_manifest_feature(paths),
+            manual_force_anchors_json=paths.get("manual_force_anchors_json") or "",
+        )
+        updated: AgentState = {**state, "manual_force_anchor_status": summary}
+        if summary.get("errors"):
+            failures = list(updated.get("tool_failures", []))
+            failures.extend(
+                {
+                    "tool_name": "manual_force_anchors",
+                    "error": err,
+                    "ok": False,
+                }
+                for err in summary["errors"]
+            )
+            updated["tool_failures"] = failures
+            return updated
+        if self.ida is not None and (summary.get("changed") or paths.get("manual_force_anchors_json")):
+            config = load_config(state["config_path"])
+            cfg = GraphConfig(**state.get("graph_config", {}))
+            ida_summary = apply_manual_force_anchor_ida_updates(
+                ida=self.ida,
+                manual_force_anchors_json=paths.get("manual_force_anchors_json") or "",
+                lua_version=resolve_target_lua_version(config),
+                ida_type_root=str(paths.get("ida_type_root") or ""),
+                ida_signature_db=str(paths.get("ida_signature_db") or ""),
+                vanilla_source_root=str(paths.get("vanilla_lua_source_root") or ""),
+                type_mode=str(cfg.ida_type_injection_mode or "vanilla_headers"),
+                enable_type_injection=bool(cfg.enable_ida_type_injection),
+            )
+            updated["manual_force_anchor_ida_status"] = ida_summary
+            if ida_summary.get("errors"):
+                failures = list(updated.get("tool_failures", []))
+                failures.extend(
+                    {
+                        "tool_name": "manual_force_anchor_ida",
+                        "error": err,
+                        "ok": False,
+                    }
+                    for err in ida_summary["errors"]
+                )
+                updated["tool_failures"] = failures
+        return updated
 
     def build_confirmed_map(self, state: AgentState) -> AgentState:
         paths = state["paths"]

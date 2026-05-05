@@ -54,6 +54,8 @@
 | `allow_fresh_retrieval` | true | patched feature 기반 embedding retrieval 허용 |
 | `rename_min_score` | 0.92 | 일반 auto rename 최소 점수 |
 | `rename_relaxed_min_score` | 0.89~0.90 | 안전 prefix 함수용 완화 rename 점수 |
+| `enable_ida_type_injection` | true | IDA evidence 수집 전 Lua 타입 팩 자동 주입 |
+| `ida_type_injection_mode` | `vanilla_headers` | 버전별 바닐라 Lua 원본 헤더를 읽어 IDA용 선언으로 주입 |
 | `safe_auto_rename_prefixes` | `luaD_`, `luaZ_`, `luaV_finish`, `luaopen_` | 완화 rename 허용 prefix |
 
 ## 4. 정확한 호출 순서
@@ -239,6 +241,8 @@ else:
 - fresh retrieval 분기는 전체 confirmed 수가 아니라 `new_confirmed_count`로 판단한다.
 - LangGraph optional dependency가 없어도 동일한 노드 정책으로 실행 가능한 runner가 있다.
   - [scripts/22_run_local_llm_agent.py](../../scripts/22_run_local_llm_agent.py)
+- `manual_force_anchors.json` 이 더 최신이면 runner는 자동으로 `build_suite` 부터 resume 하며,
+  이 경로에서 manual force anchor seed 반영과 IDA rename/type 반영을 함께 처리한다.
 
 LM Studio를 실제로 붙일 때는 아래 조합을 표준으로 본다.
 

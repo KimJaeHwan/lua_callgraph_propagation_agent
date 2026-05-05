@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
+from lua_callgraph_propagation_agent.langgraph_agent.manual_force_anchors import apply_manual_force_anchors
 
 
 _JSON_CACHE: dict[str, tuple[float, int, Any]] = {}
@@ -638,6 +639,7 @@ def _run_downstream_steps(
         return result["ok"]
 
     anchor_path      = _resolve_path(paths["seed_anchor_json"])
+    query_json       = _resolve_path(paths.get("query_feature_json") or "")
     suite_json       = _resolve_path(paths["runtime_suite_json"])
     propagation_json = _resolve_path(paths["propagation_output_json"])
     deferred_json    = _resolve_path(paths["deferred_output_json"])
@@ -647,6 +649,24 @@ def _run_downstream_steps(
     retrieval_json   = _resolve_path(paths["retrieval_output_json"])
     session_name     = paths["session_name"]
     top_candidates   = _deferred_top_candidates(config)
+    manual_anchor_json = _resolve_path(
+        paths.get("manual_force_anchors_json") or str(anchor_path.parent / "manual_force_anchors.json")
+    )
+
+    manual_result = apply_manual_force_anchors(
+        seed_anchor_json=anchor_path,
+        query_json=query_json,
+        manual_force_anchors_json=manual_anchor_json,
+    )
+    steps.append({
+        "step": "apply_manual_force_anchors",
+        "ok": not manual_result.get("errors"),
+        "returncode": 0 if not manual_result.get("errors") else 1,
+        "stdout": json.dumps(manual_result, ensure_ascii=False),
+        "stderr": "\n".join(manual_result.get("errors") or []),
+    })
+    if manual_result.get("errors"):
+        return False, steps
 
     if not run("build_runtime_suite", [
         sys.executable, "scripts/14_build_runtime_propagation_suite.py",
