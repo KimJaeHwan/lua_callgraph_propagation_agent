@@ -1,7 +1,6 @@
 # Manual Force Anchor Workflow
 
-이 문서는 **평소에는 `22_run_local_llm_agent.py` 하나만 쓰는 흐름**을 빠르게 기억하기 위한 운영 메모다.  
-`24_apply_manual_force_anchors.py` 는 남아 있지만, 지금은 주로 디버그/수동 보조용이다.
+이 문서는 **`22_run_local_llm_agent.py` 하나만 쓰는 흐름**을 빠르게 기억하기 위한 운영 메모다.
 
 ## 핵심 원칙
 
@@ -130,18 +129,4 @@ cd /Users/test2000/Desktop/01_project/01_AI_Project/03_Lua_Mapper
   --max-rounds 5
 ```
 
-## 7. `24`는 언제 쓰나
-
-대부분은 안 써도 된다. 아래처럼 **정말 수동으로 seed/downstream만 한 번 강제 반영하고 싶을 때**만 쓴다.
-
-```bash
-./lua_llm/bin/python lua_callgraph_propagation_agent/scripts/24_apply_manual_force_anchors.py \
-  --config lua_callgraph_propagation_agent/data/runtime/results/libengine_lua536_aarch64_agent_rerun/runtime_config.json \
-  --ida-url http://127.0.0.1:13337/mcp \
-  --run-downstream
-```
-
-즉 정리하면:
-
-- 평소 운영: `22`만 사용
-- 수동 보조/디버그: 필요할 때만 `24`
+즉 정리하면 평소 운영에서는 `22`만 기억하면 된다.
