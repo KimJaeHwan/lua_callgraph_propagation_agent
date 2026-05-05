@@ -5,11 +5,21 @@ import sys
 import json
 import sqlite3
 import os
+import urllib.request
 from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
-from lua_callgraph_propagation_agent.langgraph_agent.manual_force_anchors import apply_manual_force_anchors
+from lua_callgraph_propagation_agent.langgraph_agent import CodexIdaMcpClient
+from lua_callgraph_propagation_agent.langgraph_agent.ida_types import (
+    available_type_pack,
+    build_function_signature,
+    load_type_declarations,
+)
+from lua_callgraph_propagation_agent.langgraph_agent.manual_force_anchors import (
+    apply_manual_force_anchors,
+    apply_manual_force_anchor_ida_updates,
+)
 
 
 _JSON_CACHE: dict[str, tuple[float, int, Any]] = {}
@@ -25,6 +35,102 @@ from config_loader import load_config as _cl_load_config, resolve_paths as _cl_r
 def _default_runtime_paths(config: dict) -> dict[str, Any]:
     """Delegate to config_loader.resolve_paths() — single source of truth."""
     return _cl_resolve_paths(config)
+
+
+class _HttpIdaToolSession:
+    """Small synchronous JSON-RPC wrapper for an external IDA MCP endpoint."""
+
+    def __init__(self, url: str, *, timeout_seconds: float = 60.0):
+        self.url = url
+        self.timeout_seconds = timeout_seconds
+        self._initialized = False
+        self._request_id = 0
+
+    def _next_id(self) -> int:
+        self._request_id += 1
+        return self._request_id
+
+    def _post_json(self, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            raw = response.read().decode("utf-8").strip()
+            return json.loads(raw) if raw else {}
+
+    def _post_notification(self, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds):
+            return
+
+    def _ensure_initialized(self) -> None:
+        if self._initialized:
+            return
+        self._post_json(
+            {
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "lua-callgraph-propagation-agent", "version": "0.1.0"},
+                },
+            }
+        )
+        self._post_notification(
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": None}
+        )
+        self._initialized = True
+
+    def call_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_initialized()
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        }
+        result = self._post_json(payload)
+        if "error" in result:
+            raise RuntimeError(str(result["error"]))
+        rpc_result = result.get("result") or {}
+        if isinstance(rpc_result.get("structuredContent"), dict):
+            payload = dict(rpc_result["structuredContent"])
+        elif isinstance(rpc_result, dict):
+            payload = dict(rpc_result)
+        else:
+            payload = {"content": rpc_result}
+        payload.setdefault("ok", True)
+        return payload
+
+
+def _resolve_runtime_lua_version(config: dict[str, Any], paths: dict[str, Any]) -> str:
+    return str(
+        paths.get("target_lua_version")
+        or paths.get("lua_version")
+        or config.get("analysis", {}).get("lua_version")
+        or config.get("extraction", {}).get("lua_version")
+        or "Lua_547"
+    )
+
+
+def _resolve_graph_config(config: dict[str, Any]) -> dict[str, Any]:
+    return dict(config.get("graph_config") or config.get("agent", {}).get("graph_config") or {})
+
+
+def _build_external_ida_client(ida_url: str) -> CodexIdaMcpClient:
+    return CodexIdaMcpClient(_HttpIdaToolSession(ida_url))
 
 mcp = FastMCP(
     name="lua-callgraph-propagation-agent",
@@ -1350,6 +1456,208 @@ def patch_features_with_confirmed(
         "callee_caller_references_replaced": replaced_total,
         "note": "Run bulk_query_retrieval with patched_query_json to improve retrieval candidates.",
     }
+
+
+@mcp.tool(
+    description=(
+        "Load the version-matched Lua vanilla type pack into a live IDA MCP session. "
+        "Use this when a Frontier/remote LLM needs the same typed struct context that the 22 runner "
+        "uses before collecting IDA evidence. Reads lua_version and type-pack settings from config_path."
+    )
+)
+def apply_ida_lua_type_pack(
+    config_path: str,
+    ida_url: str = "http://127.0.0.1:13337/mcp",
+    inspect_types: list[str] | None = None,
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+    graph_cfg = _resolve_graph_config(config)
+    lua_version = _resolve_runtime_lua_version(config, paths)
+    type_mode = str(graph_cfg.get("ida_type_injection_mode") or "vanilla_headers")
+    ida_type_root = str(paths.get("ida_type_root") or "")
+    vanilla_source_root = str(paths.get("vanilla_lua_source_root") or "")
+
+    if not available_type_pack(
+        lua_version,
+        ida_type_root,
+        mode=type_mode,
+        vanilla_source_root=vanilla_source_root,
+    ):
+        return {
+            "ok": False,
+            "error": f"ida_type_pack_missing:{lua_version}:{type_mode}",
+            "lua_version": lua_version,
+            "type_mode": type_mode,
+        }
+
+    ida = _build_external_ida_client(ida_url)
+    declarations = load_type_declarations(
+        lua_version,
+        ida_type_root,
+        mode=type_mode,
+        vanilla_source_root=vanilla_source_root,
+    )
+    declare = ida.declare_types(declarations)
+    if not declare.ok:
+        return {
+            "ok": False,
+            "error": declare.error,
+            "lua_version": lua_version,
+            "type_mode": type_mode,
+        }
+
+    inspected_names = inspect_types or ["lua_State", "CallInfo", "global_State", "ZIO"]
+    inspections: dict[str, Any] = {}
+    for type_name in inspected_names:
+        result = ida.inspect_type(type_name)
+        inspections[type_name] = result.result if result.ok else {"ok": False, "error": result.error}
+
+    return {
+        "ok": True,
+        "lua_version": lua_version,
+        "type_mode": type_mode,
+        "decl_count": len(declarations),
+        "inspections": inspections,
+    }
+
+
+@mcp.tool(
+    description=(
+        "Apply one known Lua function signature to a live IDA function using the versioned signature DB. "
+        "This mirrors the typed-evidence preparation path used by the 22 runner, but exposes it directly to MCP clients. "
+        "reference_func should be the real Lua function name, such as luaD_call or luaopen_base."
+    )
+)
+def apply_ida_known_signature(
+    config_path: str,
+    entry_point: str,
+    reference_func: str,
+    ida_url: str = "http://127.0.0.1:13337/mcp",
+    rename_in_ida: bool = False,
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+    graph_cfg = _resolve_graph_config(config)
+    lua_version = _resolve_runtime_lua_version(config, paths)
+    type_mode = str(graph_cfg.get("ida_type_injection_mode") or "vanilla_headers")
+    ida_type_root = str(paths.get("ida_type_root") or "")
+    ida_signature_db = str(paths.get("ida_signature_db") or "")
+    vanilla_source_root = str(paths.get("vanilla_lua_source_root") or "")
+
+    ida = _build_external_ida_client(ida_url)
+    opened = ida.open_function(entry_point)
+    if not opened.ok:
+        return {"ok": False, "error": opened.error, "entry_point": entry_point, "reference_func": reference_func}
+    function_info = opened.result.get("function") or {}
+    current_name = str(function_info.get("name") or "")
+    resolved_addr = str(function_info.get("addr") or entry_point)
+
+    if rename_in_ida and current_name != reference_func:
+        rename = ida.rename_function(entry_point, reference_func)
+        if not rename.ok:
+            return {
+                "ok": False,
+                "error": rename.error,
+                "entry_point": entry_point,
+                "reference_func": reference_func,
+                "phase": "rename_failed",
+            }
+        current_name = reference_func
+
+    if available_type_pack(
+        lua_version,
+        ida_type_root,
+        mode=type_mode,
+        vanilla_source_root=vanilla_source_root,
+    ):
+        declare = ida.declare_types(
+            load_type_declarations(
+                lua_version,
+                ida_type_root,
+                mode=type_mode,
+                vanilla_source_root=vanilla_source_root,
+            )
+        )
+        if not declare.ok:
+            return {
+                "ok": False,
+                "error": declare.error,
+                "entry_point": entry_point,
+                "reference_func": reference_func,
+                "phase": "declare_failed",
+            }
+
+    function_name_for_signature = current_name or reference_func
+    signature = build_function_signature(
+        lua_version,
+        function_name_for_signature,
+        reference_func,
+        configured_db_path=ida_signature_db,
+        vanilla_source_root=vanilla_source_root,
+    )
+    if not signature:
+        return {
+            "ok": False,
+            "error": f"signature_not_found:{lua_version}:{reference_func}",
+            "entry_point": entry_point,
+            "reference_func": reference_func,
+        }
+
+    set_type = ida.set_function_signature(entry_point, signature)
+    if not set_type.ok:
+        return {
+            "ok": False,
+            "error": set_type.error,
+            "entry_point": entry_point,
+            "reference_func": reference_func,
+            "signature": signature,
+            "phase": "set_type_failed",
+        }
+
+    return {
+        "ok": True,
+        "entry_point": entry_point,
+        "resolved_addr": resolved_addr,
+        "reference_func": reference_func,
+        "current_name": function_name_for_signature,
+        "signature": signature,
+        "renamed": bool(rename_in_ida),
+    }
+
+
+@mcp.tool(
+    description=(
+        "Read manual_force_anchors.json from config_path and sync those entries into a live IDA MCP session. "
+        "This applies the same rename/type logic that the 22 runner uses during automatic resume."
+    )
+)
+def sync_manual_force_anchors_to_ida(
+    config_path: str,
+    ida_url: str = "http://127.0.0.1:13337/mcp",
+) -> dict[str, Any]:
+    config = _load_json(_resolve_path(config_path))
+    paths = _default_runtime_paths(config)
+    graph_cfg = _resolve_graph_config(config)
+    lua_version = _resolve_runtime_lua_version(config, paths)
+
+    manual_force_anchors_json = paths.get("manual_force_anchors_json") or ""
+    if not manual_force_anchors_json:
+        return {"ok": False, "error": "manual_force_anchors_json is not configured"}
+
+    summary = apply_manual_force_anchor_ida_updates(
+        ida=_build_external_ida_client(ida_url),
+        manual_force_anchors_json=str(manual_force_anchors_json),
+        lua_version=lua_version,
+        ida_type_root=str(paths.get("ida_type_root") or ""),
+        ida_signature_db=str(paths.get("ida_signature_db") or ""),
+        vanilla_source_root=str(paths.get("vanilla_lua_source_root") or ""),
+        type_mode=str(graph_cfg.get("ida_type_injection_mode") or "vanilla_headers"),
+        enable_type_injection=bool(graph_cfg.get("enable_ida_type_injection", True)),
+    )
+    summary["ok"] = not bool(summary.get("errors"))
+    summary["lua_version"] = lua_version
+    return summary
 
 
 def main() -> None:

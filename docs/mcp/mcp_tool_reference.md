@@ -298,6 +298,48 @@ confirmed_map: dict[str, str]  # {entry_point_hex: real_name}
 
 ---
 
+## IDA 타입 / 시그니처 보조
+
+### `apply_ida_lua_type_pack`
+
+`22` runner가 IDA evidence 수집 전에 넣는 것과 같은 Lua 타입 팩을 IDA에 주입한다.  
+Frontier LLM이 MCP 경유로 직접 IDA 타입 환경을 맞추고 싶을 때 사용한다.
+
+```
+config_path: str
+ida_url: str                # 기본 http://127.0.0.1:13337/mcp
+inspect_types: list[str]    # 선택
+```
+
+---
+
+### `apply_ida_known_signature`
+
+버전별 시그니처 DB를 사용해서 특정 함수 주소에 Lua 함수 prototype을 적용한다.  
+필요하면 rename도 같이 수행할 수 있다.
+
+```
+config_path: str
+entry_point: str
+reference_func: str
+ida_url: str         # 기본 http://127.0.0.1:13337/mcp
+rename_in_ida: bool  # 기본 false
+```
+
+---
+
+### `sync_manual_force_anchors_to_ida`
+
+`manual_force_anchors.json` 을 읽어서 IDA에 rename/type 반영을 수행한다.  
+`22` runner의 manual force resume 경로와 같은 기준을 쓴다.
+
+```
+config_path: str
+ida_url: str  # 기본 http://127.0.0.1:13337/mcp
+```
+
+---
+
 ## 추천 실행 순서
 
 ### Round 1 (초기 분석)

@@ -1,149 +1,185 @@
 # Runtime Validation And Config Guide
 
-이 문서는 두 가지를 정리한다.
+이 문서는 세 가지를 정리한다.
 
-1. 외부 `stripped / nostrip` 바이너리 쌍으로 수행한 실제 검증 결과
-2. `data/configs/` 아래 JSON 파일이 무엇인지에 대한 구분
-3. Lua version/architecture별 입력 디렉터리 규칙
+1. 현재 runtime 추천 config의 구조
+2. 사용자가 직접 만지는 필드와 자동 유도되는 필드의 구분
+3. fresh clone 이후 무엇을 먼저 확인해야 하는지
 
-## 1. External Stripped/Nostrip Validation
+## 1. 현재 추천 config 정책
 
-검증 대상:
-
-- stripped binary:
-  `/Volumes/DO/lua_custom_engine_binaries/03_Lua_Mapper/lua_extract_feature_ghidra/binaries/Lua_547/x86_64/O0/stripped/lua_lua_547_0000`
-- nostrip binary:
-  `/Volumes/DO/lua_custom_engine_binaries/03_Lua_Mapper/lua_extract_feature_ghidra/binaries/Lua_547/x86_64/O0/nostrip/lua_lua_547_0000`
-
-검증 방식:
-
-- 동일한 binary index `0000`에 대해
-- `nostrip`에서 함수 이름 정답표를 만든다
-- 같은 `entry_point`의 `stripped` 함수 subset을 query로 사용한다
-- stripped query를 pipeline에 태우고
-- nostrip 정답 함수명과 비교한다
-
-생성한 입력:
-
-- query subset:
-  `data/inputs/query_features/external_strip_0000_eval_subset.json`
-- runtime config:
-  `data/configs/runtime_external_strip_0000_eval_subset.json`
-- expected mapping table:
-  `data/runtime/results/external_strip_0000_eval_subset_expected.json`
-
-검증 결과:
-
-- total cases: `19`
-- accepted: `10`
-- deferred: `9`
-- conflict: `0`
-- overall top1 match: `18 / 19`
-- overall top1 accuracy: `0.9474`
-- accepted precision: `10 / 10 = 1.0`
-
-해석:
-
-- 자동 accept된 10개는 전부 정답이었다.
-- deferred 9개 중 대부분은 top1 prediction 자체는 이미 정답이었다.
-- 실제 오답은 `luaD_call -> luaD_callnoyield` 혼동 1건이었다.
-- 즉 현재 policy는 비교적 보수적으로 accept를 주고 있으며, accept 결과의 precision은 높게 유지되고 있다.
-
-대표 결과:
-
-- `data/runtime/results/external_strip_0000_eval_subset/final_mapping_report.json`
-- `data/runtime/results/external_strip_0000_eval_subset/propagation_result.json`
-- `data/runtime/results/external_strip_0000_eval_subset/deferred_analysis.json`
-
-## 2. Config Folder Meaning
-
-`data/configs/` 아래 파일들은 기본적으로 **실행 입력 설정 파일**이다.
-
-즉 이 폴더의 JSON은:
-
-- 어떤 query를 쓸지
-- 어떤 retrieval index를 쓸지
-- 어떤 결과 파일로 저장할지
-- 어떤 step을 켤지
-
-를 정의하는 **pipeline input config**다.
-
-산출물은 여기 저장되지 않는다.
-
-실제 산출물 위치:
-
-- `data/runtime/query_features/`
-- `data/runtime/results/`
-
-예를 들어:
-
-- config:
-  [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
-- output:
-  `data/runtime/results/recommended_preextracted_run/`
-
-즉 `configs`는 "어떻게 실행할지"를 저장하는 곳이고,
-`runtime/results`는 "실행 결과가 무엇이었는지"를 저장하는 곳이다.
-
-추가로 현재 파이프라인은 비어 있는 경로를 자동으로 채우므로, config는 가능한 한 최소 입력만 담는 방향으로 정리하고 있다.
-
-권장 최소 config:
-
-- binary 입력용:
-  [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json)
-- pre-extracted 입력용:
-  [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
-
-## 3. Versioned Runtime Layout
-
-reference DB와 retrieval index는 Lua version/architecture별로 분리해 둔다.
-
-```text
-data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite
-data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime/
-```
-
-예:
-
-```text
-data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite
-data/inputs/retrieval_indexes/Lua_547/x86_64/runtime/
-data/inputs/retrieval_indexes/Lua_547/aarch64/runtime/
-```
-
-현재 확인 결과 `data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite`에는 `Lua_547` 데이터만 들어 있다.  
-아키텍처는 `aarch64`, `x86_64`, 최적화는 `O0/O1/O2/O3/Os`, strip mode는 현재 `nostrip`만 포함된다.
-
-향후 Lua 5.3 / 5.2를 추가할 때는 같은 규칙으로 디렉터리만 확장하면 된다.
-
-```text
-data/inputs/callgraphs/Lua_536/reference_callgraph.sqlite
-data/inputs/callgraphs/Lua_524/reference_callgraph.sqlite
-data/inputs/retrieval_indexes/Lua_536/x86_64/runtime/
-data/inputs/retrieval_indexes/Lua_524/x86_64/runtime/
-```
-
-## 4. Current Config Policy
-
-현재 Git에 포함되는 공식 config는 두 개만 유지한다.
+공식적으로 유지하는 실행 입력 config는 두 개다.
 
 - [runtime_recommended_preextracted.json](../../data/configs/runtime_recommended_preextracted.json)
-  - 가장 빠르게 구조와 실행 흐름을 확인하는 기본 진입점
+  - 가장 빠른 시작점
+  - 이미 추출된 query feature JSON이 있을 때 사용
 - [runtime_recommended_binary.json](../../data/configs/runtime_recommended_binary.json)
-  - 실제 binary extraction을 포함하는 기본 진입점
+  - 새 바이너리에서 extraction까지 포함해서 진행할 때 사용
 
-그 외 실험/평가/디버깅용 config는 로컬 재현용 자산으로 취급하고 Git에는 포함하지 않는다.
+둘 다 지금은 **최소 입력 중심 형식**으로 정리되어 있다.
 
-## 5. Practical Rule
+대표 구조:
 
-실무적으로는 이렇게 생각하면 된다.
+```json
+{
+  "session_name": "my_run",
+  "user_input": {
+    "binary": "data/runtime/input/target.so",
+    "lua_version": "Lua_536",
+    "architecture": "aarch64",
+    "opt_level": "O2",
+    "strip_mode": "stripped",
+    "query_feature_json": "..."
+  },
+  "runtime": {
+    "results_root": "data/runtime/results",
+    "query_features_root": "data/runtime/query_features"
+  },
+  "tooling": {
+    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
+    "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite"
+  },
+  "analysis": { ... },
+  "graph_config": { ... },
+  "managed_paths": { ... }
+}
+```
 
-- `data/configs/*.json`
-  - 실행에 필요한 입력 설정
-- `data/inputs/query_features/*.json`
-  - 실행에 넣을 query fixture 또는 pre-extracted feature
-- `data/runtime/results/**`
-  - 실행 후 생성된 산출물
+## 2. 무엇을 직접 수정하나
 
-즉 `configs`는 보존할 가치가 있는 "재현 가능한 실행 계획"이고,
-`runtime/results`는 대체로 재생성 가능한 "실행 결과"다.
+실무적으로는 아래만 자주 만지면 된다.
+
+### `session_name`
+
+- 결과가 저장될 실행 세션 이름
+- 최종 결과는 보통 `data/runtime/results/<session_name>/` 아래에 모인다
+
+### `user_input`
+
+- `binary`
+  - binary 입력 경로일 때만 필요
+- `lua_version`
+  - `Lua_547`, `Lua_536`, `Lua_524`
+- `architecture`
+  - `x86_64`, `aarch64`
+- `opt_level`
+  - `O0`, `O2` 등
+- `strip_mode`
+  - `nostrip`, `stripped`
+- `query_feature_json`
+  - pre-extracted 입력일 때 가장 중요
+  - binary extraction을 이미 한 뒤 재실행할 때도 이 값만 있으면 편하다
+- `feature_namespace`
+  - 보통 건드릴 필요 없다
+  - extractor가 쓰는 query feature 디렉터리 이름을 고정하고 싶을 때만 사용
+
+### `tooling`
+
+- `vanilla_lua_source_root`
+  - 버전별 바닐라 Lua 헤더/소스 루트
+  - IDA 타입 주입과 시그니처 DB 재생성에 필요
+- `ida_signature_db`
+  - SQLite 시그니처 DB
+
+### `graph_config`
+
+- accept / rename / targeted propagation 임계값
+- 여기만 바꾸면 보수적 / 공격적 모드를 조절할 수 있다
+
+## 3. 보통 안 건드려도 되는 것
+
+### `runtime`
+
+대부분 기본값 그대로 두면 된다.
+
+- `results_root`
+- `query_features_root`
+- `extractor_work_root`
+
+### `managed_paths`
+
+설명용 블록이다.
+
+- 실제로는 loader가 자동 계산한다
+- retrieval index, reference DB, final report path, manual force anchor path 등을 사람이 직접 적지 않아도 된다
+
+자동 유도되는 대표 경로:
+
+```text
+data/inputs/retrieval_indexes/<lua_version>/<architecture>/runtime
+data/inputs/callgraphs/<lua_version>/reference_callgraph.sqlite
+data/runtime/results/<session_name>/manual_force_anchors.json
+data/runtime/results/<session_name>/final_mapping_report.json
+data/runtime/query_features/<feature_namespace>/extract_manifest.json
+```
+
+## 4. runtime 결과 config도 같은 원칙
+
+예를 들어 현재 실사용 config인
+[runtime_config.json](../../data/runtime/results/libengine_lua536_aarch64_agent_rerun/runtime_config.json)
+도 이제는 같은 식으로 나뉜다.
+
+- 자주 바꿀 것:
+  - `session_name`
+  - `user_input`
+  - `graph_config`
+- 보통 유지:
+  - `runtime`
+  - `tooling`
+  - `managed_paths`
+
+즉 더 이상 `paths` 안에 결과 파일 위치를 전부 손으로 적을 필요가 없다.
+
+## 5. fresh clone 이후 체크리스트
+
+처음 clone 했을 때는 아래를 확인하면 된다.
+
+### 필수 코드/환경
+
+- Python 환경 설치
+- 프로젝트 editable install
+  - `pip install -e .`
+- Local LLM을 쓸 경우
+  - LM Studio endpoint 준비
+- IDA evidence / rename을 쓸 경우
+  - IDA MCP endpoint 준비
+
+### 필수 데이터 자산
+
+- reference DB
+  - `data/inputs/callgraphs/<Lua_version>/reference_callgraph.sqlite`
+- retrieval index
+  - `data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime/`
+- IDA function signature DB
+  - `data/inputs/ida_types/lua_function_signatures.sqlite`
+- 바닐라 Lua source tree
+  - `../lua_custom_engine_generator/lua_source_vanilla`
+  - 또는 config의 `tooling.vanilla_lua_source_root`가 가리키는 위치
+
+### binary extraction까지 할 경우 추가
+
+- Ghidra / pyghidra 환경
+- extractor가 접근 가능한 target binary
+
+### pre-extracted만 쓸 경우
+
+- `user_input.query_feature_json`이 실제 존재하는지 확인
+
+## 6. 환경 자산이 없을 때
+
+자산이 비어 있으면 보통 아래 스크립트나 release 자산이 필요하다.
+
+- reference DB 재생성
+  - `scripts/setup/01_build_reference_callgraph_db.py`
+- Lua signature DB 재생성
+  - `scripts/setup/02_build_lua_signature_db.py`
+- 샘플 runtime asset 복사
+  - `scripts/setup/21_prepare_runtime_assets.py`
+
+대용량 자산인 retrieval index와 callgraph DB는 Git tracked가 아니라 release / 로컬 준비 자산으로 취급한다.
+
+## 7. 운영 관점 한 줄 정리
+
+- 실행용 진입점은 `20`, `22`
+- config에서 주로 보는 곳은 `user_input`, `tooling`, `graph_config`
+- 나머지 경로는 loader가 최대한 자동으로 채운다

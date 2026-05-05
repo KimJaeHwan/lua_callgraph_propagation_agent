@@ -1,11 +1,20 @@
 {
   "pipeline_name": "runtime_recommended_preextracted",
-  "description": "Config for pre-extracted feature input (no Ghidra needed). Use run_analysis to execute.",
+  "description": "Recommended pre-extracted config. Edit user_input.query_feature_json and Lua version/architecture only.",
   "session_name": "recommended_preextracted_run",
-  "analysis": {
+  "user_input": {
     "lua_version": "Lua_547",
     "architecture": "x86_64",
-    "query_json": "data/inputs/query_features/lua547_x86_single_deregister_tm_clones.json",
+    "query_feature_json": "data/inputs/query_features/lua547_x86_single_deregister_tm_clones.json"
+  },
+  "runtime": {
+    "results_root": "data/runtime/results"
+  },
+  "tooling": {
+    "vanilla_lua_source_root": "../lua_custom_engine_generator/lua_source_vanilla",
+    "ida_signature_db": "data/inputs/ida_types/lua_function_signatures.sqlite"
+  },
+  "analysis": {
     "retrieval": {
       "candidate_pool": 100,
       "topk": 20,
@@ -21,5 +30,8 @@
     "deferred_analysis": {
       "top_candidates": 5
     }
+  },
+  "managed_paths": {
+    "note": "retrieval_index, reference_db, final_report_json, and manual_force_anchors_json are derived from user_input + session_name."
   }
 }

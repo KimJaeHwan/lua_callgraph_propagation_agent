@@ -52,15 +52,16 @@ class LangGraphAgentNodes:
 
     def run_extraction(self, state: AgentState) -> AgentState:
         config = load_config(state["config_path"])
+        target = config.get("user_input") or config.get("target") or {}
         extraction = config.get("extraction", {})
         session_name = config.get("session_name", "runtime_session")
         result = self.lua.extract_query_features(
-            binary=extraction.get("binary", ""),
-            lua_version=extraction.get("lua_version", resolve_target_lua_version(config)),
-            architecture=extraction.get("architecture", resolve_target_architecture(config)),
+            binary=target.get("binary") or extraction.get("binary", ""),
+            lua_version=target.get("lua_version") or extraction.get("lua_version", resolve_target_lua_version(config)),
+            architecture=target.get("architecture") or extraction.get("architecture", resolve_target_architecture(config)),
             session_name=session_name,
-            opt_level=extraction.get("opt_level", "O2"),
-            strip_mode=extraction.get("strip_mode", "stripped"),
+            opt_level=target.get("opt_level") or extraction.get("opt_level", "O2"),
+            strip_mode=target.get("strip_mode") or extraction.get("strip_mode", "stripped"),
         )
         return self._record_tool_result(state, result, phase="extracted")
 

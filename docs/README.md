@@ -8,6 +8,7 @@
 - [guides/extraction_runtime_environment.md](guides/extraction_runtime_environment.md): Ghidra / pyghidra 환경 설정
 - [guides/macos_mps_setup.md](guides/macos_mps_setup.md): Apple Silicon MPS 설정
 - [guides/manual_force_anchor_workflow_ko.md](guides/manual_force_anchor_workflow_ko.md): 22번 runner 중심의 manual force anchor 운영 흐름
+- [guides/fresh_clone_checklist_ko.md](guides/fresh_clone_checklist_ko.md): 처음 clone 후 실행 가능 상태 점검
 - [guides/release_assets.md](guides/release_assets.md): 릴리스 자산과 배포 메모
 
 ## workflows

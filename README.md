@@ -70,6 +70,16 @@ python scripts/13_select_seed_anchors.py \
 - versioned retrieval index: `data/inputs/retrieval_indexes/<Lua_version>/<architecture>/runtime`
 - 실행 결과: `data/runtime/results/<session_name>/`
 
+현재 추천 config는 `user_input` 중심으로 정리되어 있다.
+
+- 자주 바꾸는 값: `session_name`, `user_input`, `tooling`, `graph_config`
+- 보통 안 건드리는 값: `runtime`, `managed_paths`
+
+자세한 설명은 아래 문서를 보면 된다.
+
+- [docs/reference/runtime_validation_and_configs.md](docs/reference/runtime_validation_and_configs.md)
+- [docs/guides/fresh_clone_checklist_ko.md](docs/guides/fresh_clone_checklist_ko.md)
+
 ## Quick Start
 
 ### 1. pre-extracted feature로 분석 (가장 빠른 경로)
