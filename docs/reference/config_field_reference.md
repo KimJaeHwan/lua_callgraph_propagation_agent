@@ -278,7 +278,7 @@
 }
 ```
 
-나머지 경로는 [10_run_name_mapping_pipeline.py](../../scripts/10_run_name_mapping_pipeline.py)에서 기본값으로 자동 채워준다.
+나머지 경로는 [config_loader.py](../../scripts/config_loader.py)와 runtime config 기본 규칙에서 자동 채워준다.
 
 ## 6. 추천 읽는 순서
 

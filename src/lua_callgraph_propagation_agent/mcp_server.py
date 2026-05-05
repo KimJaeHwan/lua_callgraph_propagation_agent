@@ -30,7 +30,7 @@ mcp = FastMCP(
     name="lua-callgraph-propagation-agent",
     instructions=(
         "Use this MCP to drive the deterministic Lua runtime name-mapping workflow with "
-        "phase-separated execution only. Do not rely on scripts/10_run_name_mapping_pipeline.py "
+        "phase-separated execution only. Do not rely on a monolithic full-pipeline script "
         "from MCP, because extraction and analysis must stay split to avoid Ghidra JVM and "
         "embedding-model memory overlap. "
         "RECOMMENDED ANALYST LOOP for a stripped production binary (e.g. game engine): "
@@ -121,7 +121,7 @@ def _run_command(command: list[str], *, stream_output: bool = False) -> dict[str
     description=(
         "Extract Ghidra/pyghidra features from one target binary into the runtime workspace. "
         "Runs scripts/11_extract_query_features.py as a subprocess so Ghidra JVM is fully "
-        "isolated. This MCP intentionally does not expose scripts/10_run_name_mapping_pipeline.py. "
+        "isolated. This MCP intentionally does not expose a monolithic full-pipeline path. "
         "binary: absolute path to the .so or ELF binary. "
         "lua_version: e.g. 'Lua_547', 'Lua_536'. "
         "architecture: 'x86_64' or 'aarch64'. "

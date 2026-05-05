@@ -551,5 +551,4 @@ pip install fastmcp sentence-transformers numpy scikit-learn tqdm
 
 ---
 
-*이 문서는 `scripts/17_patch_and_rerun.py`, `scripts/16_analyze_mapping_results.py`,  
-`scripts/18_sync_ida_names.py`, `src/.../mcp_server.py`와 함께 유지되어야 한다.*
+*이 문서는 `scripts/22_run_local_llm_agent.py` 와 `src/.../mcp_server.py`의 현재 운영 흐름과 함께 유지되어야 한다.*

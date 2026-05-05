@@ -28,14 +28,8 @@ pip install sentence-transformers
 `12_run_bulk_query_retrieval.py`가 즉시 crash 한다.  
 나머지 스크립트(propagation, targeted_retrieval, 결과 조회 등)는 모두 정상 동작한다.
 
-`17_patch_and_rerun.py` 사용 시 임시 우회:
-```powershell
-python scripts/17_patch_and_rerun.py ... --skip-retrieval
-```
-
-단, `--skip-retrieval`은 **기존 retrieval_result.json을 재사용**하므로  
-확정된 199개 함수 이름이 반영된 patched feature가 검색에 활용되지 않는다.  
-→ **설치 후 최소 1회 fresh retrieval 필수**
+manual force anchor나 patched feature를 반영한 뒤에는, 기존 retrieval 결과 재사용보다
+실제 `bulk_query_retrieval`을 다시 태우는 쪽이 더 안전하다.
 
 ## 한 줄 이해
 

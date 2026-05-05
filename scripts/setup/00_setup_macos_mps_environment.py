@@ -13,13 +13,17 @@ import sys
 import textwrap
 from pathlib import Path
 
+SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+
 from platform_runtime import normalize_stdio_utf8
 
 
 normalize_stdio_utf8()
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REQUIREMENTS = PROJECT_ROOT / "requirements-macos-mps.txt"
 DEFAULT_VENV = PROJECT_ROOT.parent / "lua_llm_mps"
 PYTHON_CANDIDATES = [

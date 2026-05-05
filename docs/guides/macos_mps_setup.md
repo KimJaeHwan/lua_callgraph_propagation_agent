@@ -39,7 +39,7 @@ Apple Silicon + MPS는 상대적으로 Python 3.11 환경이 더 안정적이어
 
 ```bash
 cd lua_callgraph_propagation_agent
-python3 scripts/00_setup_macos_mps_environment.py
+python3 scripts/setup/00_setup_macos_mps_environment.py
 ```
 
 기본 동작:
@@ -113,6 +113,6 @@ PY
 
 ## 관련 파일
 
-- [../../scripts/00_setup_macos_mps_environment.py](../../scripts/00_setup_macos_mps_environment.py)
+- [../../scripts/setup/00_setup_macos_mps_environment.py](../../scripts/setup/00_setup_macos_mps_environment.py)
 - [../../requirements-macos-mps.txt](../../requirements-macos-mps.txt)
 - [../architecture/retrieval_performance_plan.md](../architecture/retrieval_performance_plan.md)

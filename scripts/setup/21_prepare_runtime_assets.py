@@ -8,7 +8,7 @@ copy so the runtime can work without depending on sibling repositories.
 
 Typical usage:
 
-  ./lua_llm/bin/python scripts/21_prepare_runtime_assets.py --force
+  ./lua_llm/bin/python scripts/setup/21_prepare_runtime_assets.py --force
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ROOT = PROJECT_ROOT.parent
 
 DEFAULT_REFERENCE_ROOT = WORKSPACE_ROOT / "lua_extract_feature_ghidra" / "outputs_vanilla"

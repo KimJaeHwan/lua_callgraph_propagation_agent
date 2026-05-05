@@ -26,14 +26,8 @@ pip install -e .
 | 단계 | 설치 여부 | 동작 |
 |------|-----------|------|
 | `12_run_bulk_query_retrieval.py` | **필수** | 없으면 즉시 crash |
-| 나머지 모든 스크립트 (13~17, 04, 05, 15) | 불필요 | 정상 동작 |
+| 나머지 핵심 스크립트 (13~15, 04, 05) | 불필요 | 정상 동작 |
 | `12c_targeted_retrieval.py` | 불필요 | 정상 동작 (embedding 없이 구조 기반 검색) |
-
-> **주의**: `sentence-transformers`가 설치되지 않은 상태에서 `17_patch_and_rerun.py`를 실행하면  
-> retrieval 단계가 crash 한다. 이때는 `--skip-retrieval` 플래그로 우회한다.  
-> 단, `--skip-retrieval`을 쓰면 기존 `retrieval_result.json`을 재사용하므로  
-> 확정된 함수 이름(patched feature)이 retrieval에 반영되지 않는다.  
-> **가능하면 설치 후 최소 1회 fresh retrieval을 돌리는 것을 강력히 권장한다.**
 
 ### 권장 전체 파이프라인 (설치 후)
 
@@ -57,12 +51,6 @@ python scripts/13_select_seed_anchors.py \
   --scope-json .../lua_scope.json \
   --targeted-json .../targeted_retrieval.json
 
-# 또는 17_patch_and_rerun.py 한 번에:
-python scripts/17_patch_and_rerun.py \
-  --result-dir data/runtime/results/<session> \
-  --query-json .../libengine_patched.json \
-  --lua-version Lua_536
-  # (scope JSON이 result-dir에 있으면 자동 적용)
 ```
 
 ## 런타임 구성
@@ -71,9 +59,10 @@ python scripts/17_patch_and_rerun.py \
 |------|------|
 | Ghidra feature extractor | `src/lua_callgraph_propagation_agent/vendor/pyghidra_feature_extractor.py` |
 | hybrid retrieval engine | `src/lua_callgraph_propagation_agent/vendor/hybrid_retrieval_embedding.py` |
-| 파이프라인 참조용 진입점 | `scripts/10_run_name_mapping_pipeline.py` (**직접 실행 비권장** — 메모리 이슈 참고) |
+| Local LLM runner | `scripts/22_run_local_llm_agent.py` |
 | FastMCP 서버 | `scripts/20_run_mcp_server.py` |
 | config 경로 통합 | `scripts/config_loader.py` |
+| 환경/생성용 스크립트 | `scripts/setup/` |
 
 핵심 입력 위치:
 
@@ -125,12 +114,14 @@ python scripts/04_propagate_from_anchors.py --iterative ...
 python scripts/15_export_final_mapping_report.py ...
 ```
 
-## 메모리 이슈 주의
+## 운영 원칙
 
-`scripts/10_run_name_mapping_pipeline.py`는 extraction + analysis를 하나의 프로세스에서 순서대로 실행하는 참조용 스크립트다. Ghidra JVM과 embedding 모델이 메모리를 동시에 점유하면 OOM이 발생할 수 있으므로, **실제 binary 분석에서는 10번 스크립트를 직접 사용하지 않는다.**
+실행 진입점은 아래 두 개만 기억하면 된다.
 
-같은 이유로 MCP 서버도 `10_run_name_mapping_pipeline.py`를 감싸는 tool을 노출하지 않는다.  
-MCP에서는 extraction과 downstream 단계를 직접 호출하는 방식만 지원한다.
+- `scripts/20_run_mcp_server.py`
+- `scripts/22_run_local_llm_agent.py`
+
+환경 준비나 데이터 생성은 `scripts/setup/` 아래로 분리되어 있다.
 
 ## FastMCP 서버
 
@@ -216,6 +207,7 @@ Round N (반복):
 | [docs/guides/mcp_quickstart_guide.md](docs/guides/mcp_quickstart_guide.md) | 처음 쓰는 사람용 입문 가이드. sentence_transformers 설치 확인부터 시작 |
 | [docs/guides/extraction_runtime_environment.md](docs/guides/extraction_runtime_environment.md) | Ghidra / pyghidra 환경 설정 |
 | [docs/guides/macos_mps_setup.md](docs/guides/macos_mps_setup.md) | Apple Silicon MPS 전용 환경 구성 |
+| [docs/guides/manual_force_anchor_workflow_ko.md](docs/guides/manual_force_anchor_workflow_ko.md) | `22` 중심 manual force anchor 운영 흐름 |
 | [docs/guides/release_assets.md](docs/guides/release_assets.md) | 릴리스 자산 구성과 배포 메모 |
 
 ### 워크플로우 / 운영

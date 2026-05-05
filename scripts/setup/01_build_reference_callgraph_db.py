@@ -11,13 +11,13 @@ Output:
 Typical commands from the lua_callgraph_propagation_agent project root:
 
   # Build or replace the DB from the default vanilla feature directory.
-  python3 scripts/01_build_reference_callgraph_db.py --replace
+  python3 scripts/setup/01_build_reference_callgraph_db.py --replace
 
   # Show target JSON files without creating a DB.
-  python3 scripts/01_build_reference_callgraph_db.py --list-only
+  python3 scripts/setup/01_build_reference_callgraph_db.py --list-only
 
   # Build with explicit paths.
-  python3 scripts/01_build_reference_callgraph_db.py \
+  python3 scripts/setup/01_build_reference_callgraph_db.py \
     --input-root data/inputs/reference_features \
     --output-db data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite \
     --replace
@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_ROOT = (PROJECT_ROOT / "data" / "inputs" / "reference_features").resolve()
 SCHEMA_VERSION = "0.2"
 

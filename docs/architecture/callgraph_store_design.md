@@ -224,7 +224,7 @@ data/eval/fixtures/*.json                            # small fixture only
 바닐라 feature JSON에서 reference DB를 생성한다.
 
 ```bash
-python3 scripts/01_build_reference_callgraph_db.py --replace
+python3 scripts/setup/01_build_reference_callgraph_db.py --replace
 ```
 
 기본 입력:
@@ -242,7 +242,7 @@ data/inputs/callgraphs/Lua_547/reference_callgraph.sqlite
 대상 feature JSON만 확인하려면 다음 명령을 사용한다.
 
 ```bash
-python3 scripts/01_build_reference_callgraph_db.py --list-only
+python3 scripts/setup/01_build_reference_callgraph_db.py --list-only
 ```
 
 ## 10. Scoring MVP 메모

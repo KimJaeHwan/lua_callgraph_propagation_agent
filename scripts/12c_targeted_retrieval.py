@@ -43,7 +43,7 @@ Usage
 
 Notes
 -----
-  • Use the *patched* query JSON (from 17_patch_and_rerun / patch_features_with_confirmed)
+  • Use the *patched* query JSON (from patch_features_with_confirmed / 22 runner resume flow)
     so confirmed callee/caller names appear as real Lua names, giving more voting edges.
   • For anchors-json, accepts either seed_anchors.json or propagation_result.json.
     Using propagation_result.json (accepted entries) gives the richest confirmed set.

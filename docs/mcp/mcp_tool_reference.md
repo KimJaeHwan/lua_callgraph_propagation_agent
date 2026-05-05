@@ -4,7 +4,7 @@
 
 각 tool이 "무엇을 하는지", "언제 써야 하는지", "입력은 무엇인지"를 빠르게 확인하기 위한 레퍼런스다.
 
-> MCP는 `scripts/10_run_name_mapping_pipeline.py`를 감싸는 tool을 **의도적으로 노출하지 않는다**.  
+> MCP는 단일 full-pipeline 스크립트를 감싸는 tool을 **의도적으로 노출하지 않는다**.  
 > extraction과 analysis를 한 프로세스에 묶으면 Ghidra JVM + embedding 메모리가 겹쳐 OOM이 발생할 수 있기 때문이다.
 
 ---

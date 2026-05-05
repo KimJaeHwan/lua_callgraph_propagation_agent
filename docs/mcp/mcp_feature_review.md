@@ -42,7 +42,7 @@
 
 ## 의도적으로 노출하지 않는 것
 
-- `scripts/10_run_name_mapping_pipeline.py` 래핑 툴
+- 단일 full-pipeline 래핑 툴
   - 이유: binary 분석 시 extraction과 analysis를 반드시 별도 프로세스로 실행해야 함
   - Ghidra JVM + embedding 모델이 한 프로세스에 겹치면 OOM 발생 가능
 

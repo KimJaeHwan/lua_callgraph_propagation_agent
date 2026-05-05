@@ -29,7 +29,7 @@ flowchart TD
     P --> Q[final_mapping_report.json]
 
     Q --> R{분석가 검증 필요?}
-    R -->|예| S[17_patch_and_rerun.py<br/>feature patch force anchor dedup]
+    R -->|예| S[manual_force_anchors.json 수정<br/>22 runner auto-resume]
     S --> T[12c_targeted_retrieval.py<br/>anchor 주변 구조 검색]
     T --> H
     S --> H

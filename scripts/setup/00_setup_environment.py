@@ -10,7 +10,7 @@ What this does:
   5. Run a dry-run pipeline to verify everything is wired up
 
 Usage:
-  python scripts/00_setup_environment.py
+  python scripts/setup/00_setup_environment.py
 
 Options:
   --release-tag       GitHub release tag to download assets from (default: v0.1.0)
@@ -35,9 +35,13 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+
 from platform_runtime import normalize_stdio_utf8, resolve_venv_python
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GITHUB_REPO = "KimJaeHwan/lua_callgraph_propagation_agent"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
@@ -176,15 +180,15 @@ def download_runtime_assets(tag: str, lua_version: str, architecture: str) -> No
 
 
 def verify_setup(python: str) -> None:
-    default_config = PROJECT_ROOT / "data" / "configs" / "runtime_recommended_preextracted.json"
+    default_config = PROJECT_ROOT / "data" / "configs" / "runtime_recommended_binary.json"
+    retrieval_index_root = PROJECT_ROOT / "data" / "inputs" / "retrieval_indexes"
+    if not default_config.exists():
+        raise SystemExit(f"[FAIL] missing config: {default_config}")
+    if not retrieval_index_root.exists():
+        raise SystemExit(f"[FAIL] missing retrieval index root: {retrieval_index_root}")
     run(
-        [
-            python,
-            str(PROJECT_ROOT / "scripts" / "10_run_name_mapping_pipeline.py"),
-            "--config", str(default_config),
-            "--dry-run",
-        ],
-        "Dry-run pipeline verification",
+        [python, str(PROJECT_ROOT / "scripts" / "20_run_mcp_server.py"), "--help"],
+        "Verify MCP server entrypoint",
     )
 
 
@@ -224,8 +228,10 @@ def main() -> None:
 
     print("\n[SETUP] All done. Ready to run the pipeline.")
     print(f"\n  Quick start:")
-    print(f"  {python} scripts/10_run_name_mapping_pipeline.py \\")
-    print(f"    --config data/configs/runtime_recommended_preextracted.json")
+    print(f"  {python} scripts/22_run_local_llm_agent.py \\")
+    print(f"    --config data/runtime/results/<session>/runtime_config.json \\")
+    print(f"    --lmstudio-model <model> --lmstudio-base-url http://127.0.0.1:1234/v1 \\")
+    print(f"    --ida-url http://127.0.0.1:13337/mcp --max-rounds 5")
 
 
 if __name__ == "__main__":

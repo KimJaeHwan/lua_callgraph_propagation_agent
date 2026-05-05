@@ -101,25 +101,24 @@ pre-extracted query만 넣는 경우에는 Ghidra 쪽 준비는 생략할 수 �
 가장 쉬운 검증:
 
 ```bash
-../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_recommended_preextracted.json \
-  --dry-run
+../lua_llm/bin/python scripts/20_run_mcp_server.py --help
 ```
 
 runtime asset까지 준비된 뒤의 기본 실행:
 
 ```bash
-../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_recommended_preextracted.json \
-  --stop-on-error
+../lua_llm/bin/python scripts/22_run_local_llm_agent.py \
+  --config data/runtime/results/<session>/runtime_config.json \
+  --lmstudio-model <model> \
+  --lmstudio-base-url http://127.0.0.1:1234/v1 \
+  --ida-url http://127.0.0.1:13337/mcp \
+  --max-rounds 5
 ```
 
 binary extraction까지 포함한 실행:
 
 ```bash
-../lua_llm/bin/python scripts/10_run_name_mapping_pipeline.py \
-  --config data/configs/runtime_recommended_binary.json \
-  --stop-on-error
+../lua_llm/bin/python scripts/11_extract_query_features.py ...
 ```
 
 LangGraph + Local LLM 경로를 사용할 때도 release asset 구성은 동일하며, 실행 정책 임계값은
