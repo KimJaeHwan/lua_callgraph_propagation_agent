@@ -181,3 +181,64 @@ Propagation 결과는 후속 정리 단계를 거쳐 최종 리포트로 묶인�
 일반 런타임 파이프라인 다이어그램은 [runtime_pipeline_flow.mmd](runtime_pipeline_flow.mmd)에 있다.
 
 MCP + IDA analyst loop 다이어그램은 [mcp_ida_analysis_loop.mmd](mcp_ida_analysis_loop.mmd)에 있다.
+
+`22_run_local_llm_agent.py`의 실제 자동 resume, IDA typed evidence, manual force anchor 반영까지 포함한 디버깅용 전체 사이클은 [agent_runner_debug_flow.mmd](agent_runner_debug_flow.mmd)에 있다.
+
+## 7. 22번 runner 한 바퀴 읽는 법
+
+실제로 많이 쓰는 엔트리포인트는 [22_run_local_llm_agent.py](../scripts/22_run_local_llm_agent.py) 이다. 이 스크립트는 LangGraph를 직접 띄우지는 않지만, [graph.py](../src/lua_callgraph_propagation_agent/langgraph_agent/graph.py)의 route 정책과 [nodes.py](../src/lua_callgraph_propagation_agent/langgraph_agent/nodes.py)의 node 구현을 그대로 따라가는 수동 orchestrator다.
+
+한 바퀴는 보통 아래 순서로 보면 된다.
+
+1. `init_state`
+- config를 읽고 path, graph_config, IDA 사용 가능 여부를 정리한다.
+
+2. `route_after_init`
+- 완전 처음 실행인지, 중간 산출물이 있어서 resume해야 하는지 결정한다.
+- `manual_force_anchors.json`이 더 최신이면 `build_suite`부터 다시 시작한다.
+
+3. 기본 파이프라인
+- `run_extraction`
+- `detect_scope`
+- `run_bulk_retrieval`
+- `select_seed`
+- `build_suite`
+- `run_downstream`
+- `update_metrics`
+
+4. 분포 점검과 노이즈 정리
+- `analyze_distribution`
+- 필요하면 `update_noise`
+- 다시 `run_downstream`
+
+5. LLM 검증 대기열 준비
+- `export_trusted`
+- `analyze_deferred`
+- `plan_ida_verification`
+
+6. IDA + Local LLM 검증 루프
+- `collect_ida_evidence`
+- 이 단계에서 Lua 타입 팩 주입, 함수 시그니처 적용, typed decompile 수집이 같이 일어난다.
+- `llm_verify_candidate`
+- accepted면 `apply_ida_rename`
+
+7. 확정 결과를 다음 라운드에 재주입
+- `build_confirmed_map`
+- `register_force_anchors`
+- `patch_features`
+- 필요하면 `fresh_bulk_retrieval`
+- `targeted_retrieval`
+- `select_seed(include_targeted=True)`
+- 다시 `run_downstream`
+
+8. 종료 또는 다음 라운드
+- `update_metrics` 이후 `route_after_metrics`가 다음 행동을 결정한다.
+- trusted/deferred/verification queue가 남아 있으면 계속 돌고,
+- `max_rounds`, `convergence_patience`, `max_tool_failures` 조건에 걸리면 `finalize`로 간다.
+
+디버깅할 때는 아래 순서로 보면 빠르다.
+
+1. 현재 시작 지점이 이상하면 `route_after_init`
+2. IDA 타입이 이상하면 `collect_ida_evidence`
+3. accepted가 안 늘면 `export_trusted`, `analyze_deferred`, `llm_verify_candidate`
+4. 수동 anchor가 안 먹으면 `build_suite`와 `manual_force_anchors.json`

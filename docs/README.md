@@ -15,6 +15,7 @@
 
 - [workflows/runtime_pipeline_overview_ko.md](workflows/runtime_pipeline_overview_ko.md): 전체 런타임 흐름 설명
 - [workflows/runtime_pipeline_flow.mmd](workflows/runtime_pipeline_flow.mmd): 기본 파이프라인 다이어그램
+- [workflows/agent_runner_debug_flow.mmd](workflows/agent_runner_debug_flow.mmd): `22_run_local_llm_agent.py` 실제 자동 resume, IDA 검증, manual force 반영 흐름 디버깅용 다이어그램
 - [workflows/mcp_ida_analysis_loop.mmd](workflows/mcp_ida_analysis_loop.mmd): MCP + IDA Pro MCP 분석 루프 다이어그램
 - [workflows/langgraph_local_llm_ida_automation.mmd](workflows/langgraph_local_llm_ida_automation.mmd): LangGraph + Local LLM + Lua MCP + IDA MCP 자동화 호출 다이어그램
 - [workflows/langgraph_agent_object_design.mmd](workflows/langgraph_agent_object_design.mmd): LangGraph AgentState, MCP client, reasoner 객체 설계 다이어그램

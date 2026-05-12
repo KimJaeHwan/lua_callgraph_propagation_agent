@@ -1,0 +1,145 @@
+%% Debug-focused Mermaid diagram for the real 22 runner path.
+%% Verified against:
+%% - scripts/22_run_local_llm_agent.py
+%% - src/lua_callgraph_propagation_agent/langgraph_agent/graph.py
+%% - src/lua_callgraph_propagation_agent/langgraph_agent/nodes.py
+
+flowchart TD
+    START["Start<br/>scripts/22_run_local_llm_agent.py"] --> INIT
+
+    subgraph ENTRY_SG["Entry And Auto Resume"]
+        direction TB
+        INIT["nodes.py::init_state<br/>load_config + resolve_paths<br/>build AgentState and GraphConfig"]
+        RESUME{"graph.py::route_after_init"}
+        INIT --> RESUME
+
+        RESUME -->|"query_json missing"| EXTRACT
+        RESUME -->|"scope only exists"| SCOPE
+        RESUME -->|"retrieval only exists"| BULK
+        RESUME -->|"seed exists"| SEED
+        RESUME -->|"suite exists"| SUITE
+        RESUME -->|"propagation and final report exist"| METRICS
+        RESUME -->|"manual_force_anchors newer than seed or final"| SUITE
+    end
+
+    subgraph PIPELINE_SG["Main Runtime Pipeline"]
+        direction TB
+        EXTRACT["nodes.py::run_extraction<br/>Lua MCP extract_query_features"]
+        SCOPE["nodes.py::detect_scope<br/>Lua MCP detect_lua_scope"]
+        BULK["nodes.py::run_bulk_retrieval<br/>Lua MCP bulk_query_retrieval"]
+        SEED["nodes.py::select_seed<br/>Lua MCP select_seed_anchors"]
+        SUITE["nodes.py::build_suite<br/>apply manual force anchors<br/>sync manual force anchors to IDA<br/>Lua MCP build_runtime_suite"]
+        DOWN["nodes.py::run_downstream<br/>Lua MCP run_downstream"]
+        METRICS["nodes.py::update_metrics<br/>read final report and propagation summary"]
+        DIST["nodes.py::analyze_distribution<br/>Lua MCP get_mapping_distribution"]
+        NOISE{"graph.py::route_after_distribution<br/>new blacklist entries"}
+        UPDATE_NOISE["nodes.py::update_noise<br/>Lua MCP update_noise_blacklist"]
+        TRUSTED["nodes.py::export_trusted<br/>Lua MCP export_trusted_mappings"]
+        TRUSTED_Q{"graph.py::route_after_trusted<br/>trusted queue exists"}
+        DEFERRED["nodes.py::analyze_deferred<br/>Lua MCP list_deferred_cases<br/>reasoner selects deferred cases"]
+        DEFERRED_Q{"graph.py::route_after_deferred<br/>deferred queue exists"}
+        STOP{"graph.py::route_after_metrics<br/>continue or finalize"}
+        FINAL["nodes.py::finalize<br/>write final summary in state"]
+    end
+
+    subgraph VERIFY_SG["IDA And Local LLM Verification Loop"]
+        direction TB
+        PLAN["nodes.py::plan_ida_verification<br/>merge trusted and deferred queues<br/>dedup by normalized entry point"]
+        COLLECT["nodes.py::collect_ida_evidence<br/>resolve function boundary<br/>apply IDA Lua type pack<br/>apply known function signature<br/>collect typed decompile callers callees strings constants"]
+        VERIFY_NODE["nodes.py::llm_verify_candidate<br/>LocalLlmReasoner verify_candidate"]
+        ACCEPTED{"graph.py::route_after_verification<br/>decision.accepted"}
+        RENAME["nodes.py::apply_ida_rename<br/>rename in IDA if allowed<br/>reapply known signature after rename"]
+        CONFIRMED["nodes.py::build_confirmed_map<br/>query_func to entry_point to reference_func"]
+        AUTO_FORCE["nodes.py::register_force_anchors<br/>Lua MCP batch_register_force_anchors"]
+        PATCH["nodes.py::patch_features<br/>Lua MCP patch_features_with_confirmed"]
+        REFRESH{"graph.py::route_after_patch<br/>fresh retrieval needed"}
+        FRESH["nodes.py::run_bulk_retrieval patched=True<br/>fresh bulk retrieval on patched features"]
+        TARGETED["nodes.py::targeted_retrieval<br/>Lua MCP targeted_retrieval"]
+        RESEED["nodes.py::select_seed include_targeted=True<br/>reselect seeds with targeted results"]
+    end
+
+    subgraph ART_SG["Key Artifacts For Debugging"]
+        direction TB
+        QJSON["query_json<br/>or first feature file from extract manifest"]
+        SJSON["lua_scope.json"]
+        RJSON["retrieval_result.json"]
+        SEEDJSON["seed_anchors.json"]
+        MFORCE["manual_force_anchors.json"]
+        SUITEJSON["runtime_propagation_suite.json"]
+        PROPJSON["propagation_result.json"]
+        DJSON["deferred_analysis.json"]
+        FJSON["final_mapping_report.json"]
+        PATCHJSON["patched_query_json"]
+        TJSON["targeted_retrieval.json"]
+    end
+
+    EXTRACT --> SCOPE
+    EXTRACT --> QJSON
+    SCOPE --> BULK
+    SCOPE --> SJSON
+    BULK --> SEED
+    BULK --> RJSON
+    SEED --> SUITE
+    SEED --> SEEDJSON
+    SUITE --> DOWN
+    SUITE --> SUITEJSON
+    DOWN --> METRICS
+    DOWN --> PROPJSON
+    DOWN --> DJSON
+    DOWN --> FJSON
+    METRICS --> STOP
+    STOP -->|"continue"| DIST
+    STOP -->|"finalize"| FINAL
+    DIST --> NOISE
+    NOISE -->|"yes"| UPDATE_NOISE
+    NOISE -->|"no"| TRUSTED
+    UPDATE_NOISE --> DOWN
+    TRUSTED --> TRUSTED_Q
+    TRUSTED_Q -->|"yes"| PLAN
+    TRUSTED_Q -->|"no"| DEFERRED
+    DEFERRED --> DEFERRED_Q
+    DEFERRED_Q -->|"yes"| PLAN
+    DEFERRED_Q -->|"no"| FINAL
+
+    PLAN --> COLLECT
+    COLLECT --> VERIFY_NODE
+    VERIFY_NODE --> ACCEPTED
+    ACCEPTED -->|"accepted"| RENAME
+    ACCEPTED -->|"rejected and queue remains"| COLLECT
+    ACCEPTED -->|"rejected and queue empty"| DEFERRED
+    RENAME --> CONFIRMED
+    CONFIRMED --> AUTO_FORCE
+    AUTO_FORCE --> PATCH
+    PATCH --> PATCHJSON
+    PATCH --> REFRESH
+    REFRESH -->|"yes"| FRESH
+    REFRESH -->|"no"| TARGETED
+    FRESH --> TARGETED
+    TARGETED --> TJSON
+    TARGETED --> RESEED
+    RESEED --> DOWN
+    RESEED --> SEEDJSON
+
+    QJSON --> SCOPE
+    QJSON --> BULK
+    QJSON --> PATCH
+    SJSON --> BULK
+    RJSON --> SEED
+    RJSON --> SUITE
+    SEEDJSON --> SUITE
+    MFORCE --> SUITE
+    SUITEJSON --> DOWN
+    PROPJSON --> METRICS
+    DJSON --> DEFERRED
+    FJSON --> METRICS
+    PATCHJSON --> FRESH
+    PATCHJSON --> TARGETED
+    TJSON --> RESEED
+
+    subgraph NOTES_SG["Important Debug Notes"]
+        direction TB
+        NOTE1["Manual force anchors are not a separate runner now.<br/>22 reads manual_force_anchors.json during build_suite."]
+        NOTE2["Typed IDA evidence happens inside collect_ida_evidence.<br/>If lua_State or ZIO looks wrong, inspect this node first."]
+        NOTE3["Auto resume is decided before any heavy work.<br/>If the runner starts at an unexpected node, inspect route_after_init and artifact mtimes."]
+        NOTE4["Auto verified anchors and manual force anchors both feed seed_anchors.json.<br/>Manual anchors also sync to IDA during build_suite."]
+    end
